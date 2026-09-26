@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI STEM Lab — виртуальная STEM-лаборатория</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@200;300;400;500;600&display=swap" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Перейти к содержимому</a>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="grad-chemistry" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#1a5cff"/></linearGradient><linearGradient id="grad-physics" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#f97316"/></linearGradient><linearGradient id="grad-biology" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ee7b7"/><stop offset="1" stop-color="#059669"/></linearGradient><linearGradient id="grad-ai" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a78bfa"/><stop offset="1" stop-color="#db2777"/></linearGradient></defs></svg>
+  <header class="top">
+    <button id="homeBtn" class="brand" type="button" aria-label="На главную">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21.5h11.6a2 2 0 0 0 1.7-3L14 9V3"/><path d="M7 15h10"/></svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">AI STEM Lab</span>
+        <span class="brand-sub">Виртуальная STEM-лаборатория</span>
+      </span>
+    </button>
+    <nav id="topNav" class="top-nav" aria-label="Предметы" hidden></nav>
+    <button id="fontBtn" type="button" class="ghost small font-btn" aria-pressed="false" title="Крупный текст">A+</button>
+    <div id="userBox" class="user-box" hidden>
+      <span id="userName" class="user-name"></span>
+      <span id="avatar" class="avatar" aria-hidden="true"></span>
+      <button id="logoutBtn" type="button" class="ghost small">Выйти</button>
+    </div>
+  </header>
+  <div id="main-content" tabindex="-1"></div>
+
+
+  <!-- ---------- Вход и регистрация ---------- -->
+  <section id="auth" class="auth" hidden>
+    <div class="glow" aria-hidden="true"></div>
+    <div class="hero-text">
+      <span class="tag">Виртуальный практикум · 8–9 класс</span>
+      <h1>Опыты по химии, физике и биологии — прямо в браузере</h1>
+      <p>Лабораторные работы без оборудования: гипотеза, опыт, наблюдения и вывод. Результаты сохраняются и видны учителю.</p>
+      <ul class="hero-points">
+        <li><b>21</b><span>лабораторная работа по программе</span></li>
+        <li><b>3</b><span>предмета: химия, физика, биология</span></li>
+        <li><b>ИИ</b><span>ассистент для объяснений</span></li>
+      </ul>
+    </div>
+    <div class="auth-card glass">
+      <h2 class="auth-title">Вход в практикум</h2>
+      <div class="tabs" role="tablist">
+        <button id="tabLogin" type="button" role="tab" class="tab active" aria-selected="true">Вход</button>
+        <button id="tabRegister" type="button" role="tab" class="tab" aria-selected="false">Регистрация</button>
+      </div>
+
+      <form id="loginForm" class="form" novalidate>
+        <label>Номер телефона<input name="phone" type="tel" autocomplete="tel" placeholder="+7 7XX XXX XX XX" required /></label>
+        <label>Пароль<input name="password" type="password" autocomplete="current-password" required /></label>
+        <p class="form-error" hidden></p>
+        <button type="submit" class="primary">Войти</button>
+      </form>
+
+      <form id="registerForm" class="form" novalidate hidden>
+        <div class="role-select" role="radiogroup" aria-label="Роль">
+          <label><input type="radio" name="role" value="student" checked /> <span>Ученик</span></label>
+          <label><input type="radio" name="role" value="teacher" /> <span>Учитель</span></label>
+        </div>
+        <label>Имя и фамилия<input name="fullName" autocomplete="name" maxlength="80" required /></label>
+        <label><span id="gradeLabel">Класс</span><input name="grade" maxlength="4" placeholder="8А" required /></label>
+        <label>Номер телефона<input name="phone" type="tel" autocomplete="tel" placeholder="+7 7XX XXX XX XX" required /></label>
+        <label>Пароль<input name="password" type="password" autocomplete="new-password" minlength="8" placeholder="не короче 8 символов" required /></label>
+        <label id="codeField">Код класса <span class="muted">(выдаёт учитель, можно ввести позже)</span><input name="classCode" maxlength="6" placeholder="например, 4F9A2C" /></label>
+        <p class="form-error" hidden></p>
+        <button type="submit" class="primary">Зарегистрироваться</button>
+      </form>
+      <p id="authNotice" class="auth-notice" hidden></p>
+      <button id="guestBtn" type="button" class="guest-btn">Попробовать без регистрации →</button>
+    </div>
+  </section>
+
+  <!-- ---------- Личный кабинет ---------- -->
+  <section id="menu" class="dash" hidden>
+    <h1 class="greeting"><span id="greetWord"></span>, <span id="greetName" class="grad-text"></span></h1>
+
+    <div id="onboarding" class="onboarding" hidden>
+      <div class="onboarding-steps">
+        <div><b>1</b><span>Выберите предмет в шапке и тему ниже</span></div>
+        <div><b>2</b><span>Откройте лабораторную работу</span></div>
+        <div><b>3</b><span>Следуйте шагам справа — кнопки подскажут действие</span></div>
+      </div>
+      <button id="onboardingClose" type="button" class="ghost small">Понятно</button>
+    </div>
+
+    <div id="banner" class="banner">
+      <span class="banner-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+      </span>
+      <div class="banner-text">
+        <div id="bannerTitle" class="banner-title"></div>
+        <div id="bannerSub" class="banner-sub"></div>
+      </div>
+      <form id="joinForm" class="join-form" hidden>
+        <input name="code" maxlength="6" placeholder="Код класса" aria-label="Код класса" required />
+        <button type="submit" class="light">Вступить</button>
+      </form>
+      <button id="bannerBtn" type="button" class="light"></button>
+      <p class="form-error banner-error" hidden></p>
+    </div>
+
+    <div class="dash-cards">
+      <div class="card dash-stat">
+        <div class="stat-top">
+          <span class="stat-bar-mini" aria-hidden="true"></span>
+          <span id="statBadge" class="pill-soft"></span>
+        </div>
+        <div class="stat-row">
+          <span id="statValue" class="stat-value">0</span>
+          <span id="statTotal" class="stat-total"></span>
+        </div>
+        <div class="progress"><div id="statProgress" class="progress-bar"></div></div>
+        <p id="statNote" class="muted small"></p>
+      </div>
+      <div class="card dash-check">
+        <ol id="checklist" class="checklist"></ol>
+      </div>
+    </div>
+
+    <div id="subjectSections"></div>
+  </section>
+
+  <!-- ---------- Учитель: результаты класса ---------- -->
+  <section id="teacher" class="dash" hidden>
+    <div class="home-intro">
+      <span class="tag">Учителю</span>
+      <h1>Результаты класса <span id="teacherClass"></span></h1>
+      <p>Код класса для учеников: <b id="teacherCode" class="code"></b>. Ученики вводят его при регистрации или в меню.</p>
+    </div>
+    <div class="card glass"><div id="classTable"></div></div>
+  </section>
+
+  <!-- ---------- Рабочее место ---------- -->
+  <main id="workspace" class="workspace" hidden>
+    <div class="work-bar">
+      <button id="backBtn" type="button" class="ghost small">← Назад</button>
+      <h1 id="workTitle" class="work-title"></h1>
+    </div>
+
+    <div class="focus-grid">
+      <section class="stage">
+        <div id="labCard" class="lab-card">
+          <div id="lab" class="lab"></div>
+          <p id="hint" class="scene-hint"></p>
+
+          <div class="lab-bar">
+            <label class="heater">
+              <span>Нагрев: <b id="tempValue">20</b> °C</span>
+              <input type="range" id="temp" min="20" max="100" step="5" value="20" />
+            </label>
+            <button id="washBtn" type="button" class="ghost">Вымыть стакан</button>
+          </div>
+
+          <div id="predict" class="predict" hidden>
+            <div class="predict-box">
+              <h2>Гипотеза: что будет наблюдаться?</h2>
+              <div class="predict-options">
+                <button data-see="gas" type="button">Выделение газа</button>
+                <button data-see="precipitate" type="button">Выпадение осадка</button>
+                <button data-see="color" type="button">Изменение окраски</button>
+                <button data-see="none" type="button">Видимых изменений нет</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="reagentBar" class="reagent-bar" role="group" aria-label="Реактивы на столе"></div>
+
+        <!-- Физика и биология: симуляция с регуляторами и показаниями приборов -->
+        <div id="simCard" class="sim-card" hidden>
+          <div id="simCanvas" class="sim-canvas-box"></div>
+          <p id="simHint" class="scene-hint" hidden></p>
+          <div class="sim-panel">
+            <div id="simControls" class="sim-controls"></div>
+            <div id="simReadout" class="sim-readout"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Справа — только то, что нужно прямо сейчас -->
+      <aside class="focus-side">
+        <div id="lessonSide" class="card" hidden>
+          <div id="coach" class="coach" aria-live="polite"></div>
+        </div>
+
+        <div id="sandboxSide" hidden>
+          <div id="result" class="card result">
+            <div class="result-head">
+              <h2 id="resultTitle">Стакан пуст</h2>
+              <div id="contents" class="contents"></div>
+            </div>
+            <div id="verdict" class="verdict" hidden></div>
+            <pre id="equation" class="equation" hidden></pre>
+            <ul id="observations"></ul>
+            <p id="rate" class="rate" hidden></p>
+            <p id="safety" class="safety" hidden></p>
+            <button id="whyBtn" type="button" class="ghost" hidden>Объяснение ИИ-ассистента</button>
+            <div id="explain" class="explain" hidden>
+              <span class="badge">ИИ-ассистент</span>
+              <p id="explanation"></p>
+            </div>
+          </div>
+        </div>
+
+        <div id="simSide" class="card" hidden>
+          <h2>Что исследуем</h2>
+          <p id="simTheory"></p>
+          <pre id="simFormula" class="equation sim-formula"></pre>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Всё дополнительное — в свёрнутых блоках, чтобы не отвлекать от опыта -->
+    <div class="drawers">
+      <details id="journalCard" class="drawer">
+        <summary>Лабораторный журнал</summary>
+        <div id="journal"></div>
+      </details>
+
+      <details id="infoDrawer" class="drawer">
+        <summary>Цель, оборудование и техника безопасности</summary>
+        <div id="info" class="info"></div>
+      </details>
+
+      <details id="chartDrawer" class="drawer">
+        <summary>График измерений</summary>
+        <div class="sim-chart-head">
+          <span class="muted small">Каждое изменение регулятора добавляет точку.</span>
+          <button id="clearChartBtn" type="button" class="ghost small">Очистить</button>
+        </div>
+        <div id="simChart" class="sim-chart-box"></div>
+      </details>
+
+      <details id="simAiDrawer" class="drawer">
+        <summary>ИИ-ассистент</summary>
+        <p class="muted">Задайте вопрос об опыте — ассистент ответит с учётом текущих показаний приборов.</p>
+        <form id="simAskForm" class="ask">
+          <label class="sr-only" for="simQuestion">Вопрос ассистенту</label>
+          <textarea id="simQuestion" maxlength="300" rows="2" placeholder="Например: почему изменились показания?"></textarea>
+          <div class="ask-actions">
+            <button type="submit" class="primary">Спросить</button>
+            <button type="button" id="simExplainBtn" class="ghost">Объяснить показания</button>
+          </div>
+        </form>
+        <div id="simAnswer" class="ai-note" aria-live="polite" hidden></div>
+      </details>
+
+      <details id="sandboxAiDrawer" class="drawer">
+        <summary>ИИ-ассистент и параметры</summary>
+        <label class="switch"><input type="checkbox" id="hypothesisMode" checked /> Формулировать гипотезу перед опытом</label>
+        <p class="muted">Опишите, что хотите исследовать, — ассистент подберёт реактивы и отметит их на полке. Опыт вы проводите самостоятельно.</p>
+        <form id="ask" class="ask">
+          <textarea id="prompt" maxlength="300" rows="2" placeholder="Например: получить нерастворимое основание"></textarea>
+          <button type="submit" id="askBtn" class="primary">Составить план</button>
+        </form>
+        <div id="plan" class="plan" hidden></div>
+      </details>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
