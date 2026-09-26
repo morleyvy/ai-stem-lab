@@ -10,6 +10,7 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Перейти к содержимому</a>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="grad-chemistry" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#1a5cff"/></linearGradient><linearGradient id="grad-physics" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#f97316"/></linearGradient><linearGradient id="grad-biology" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ee7b7"/><stop offset="1" stop-color="#059669"/></linearGradient><linearGradient id="grad-ai" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a78bfa"/><stop offset="1" stop-color="#db2777"/></linearGradient></defs></svg>
   <header class="top">
     <button id="homeBtn" class="brand" type="button" aria-label="На главную">
       <span class="logo" aria-hidden="true">
@@ -33,11 +34,18 @@
 
   <!-- ---------- Вход и регистрация ---------- -->
   <section id="auth" class="auth" hidden>
+    <div class="glow" aria-hidden="true"></div>
     <div class="hero-text">
+      <span class="tag">Виртуальный практикум</span>
       <h1>Лабораторные опыты по STEM-наукам</h1>
-      <p>21 лабораторная работа по химии, физике и биологии. Ученик выдвигает гипотезу, сам проводит опыт, записывает наблюдения в журнал и делает вывод. Учитель видит результаты класса.</p>
+      <p>Лабораторные работы без оборудования: гипотеза, опыт, наблюдения и вывод. Результаты сохраняются и видны учителю.</p>
+      <ul class="hero-points">
+        <li><b>21</b><span>лабораторная работа по программе</span></li>
+        <li><b>3</b><span>предмета: химия, физика, биология</span></li>
+        <li><b>ИИ</b><span>ассистент для объяснений</span></li>
+      </ul>
     </div>
-    <div class="auth-card">
+    <div class="auth-card glass">
       <h2 class="auth-title">Вход в практикум</h2>
       <div class="tabs" role="tablist">
         <button id="tabLogin" type="button" role="tab" class="tab active" aria-selected="true">Вход</button>
@@ -65,13 +73,13 @@
         <button type="submit" class="primary">Зарегистрироваться</button>
       </form>
       <p id="authNotice" class="auth-notice" hidden></p>
-      <button id="guestBtn" type="button" class="guest-btn">Попробовать без регистрации</button>
+      <button id="guestBtn" type="button" class="guest-btn">Попробовать без регистрации →</button>
     </div>
   </section>
 
   <!-- ---------- Личный кабинет ---------- -->
   <section id="menu" class="dash" hidden>
-    <h1 class="greeting"><span id="greetWord"></span>, <span id="greetName"></span></h1>
+    <h1 class="greeting"><span id="greetWord"></span>, <span id="greetName" class="grad-text"></span></h1>
 
     <div id="onboarding" class="onboarding" hidden>
       <div class="onboarding-steps">
@@ -83,6 +91,9 @@
     </div>
 
     <div id="banner" class="banner">
+      <span class="banner-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+      </span>
       <div class="banner-text">
         <div id="bannerTitle" class="banner-title"></div>
         <div id="bannerSub" class="banner-sub"></div>
