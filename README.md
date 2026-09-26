@@ -51,6 +51,8 @@ npm run dev            # http://localhost:5173
 
 ## Деплой (Vercel)
 
+Сайт: https://ai-stem-lab.vercel.app. Проект подключён к репозиторию на GitHub — каждый push в ветку main автоматически публикуется.
+
 1. Залить проект на GitHub и импортировать его в Vercel. Сборка: `npm run build`, папка вывода `dist`.
 2. В настройках проекта добавить переменные окружения `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` и `GEMINI_API_KEY` (или `ANTHROPIC_API_KEY`).
 3. Файлы `api/parse.js` и `api/explain.js` автоматически станут serverless-функциями. Ключ остаётся на сервере.
