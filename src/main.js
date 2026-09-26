@@ -10,6 +10,7 @@ import { preview } from './previews.js';
 import { runExperiment } from './engine.js';
 import { lineIcon } from './lineIcons.js';
 import * as account from './account.js';
+import { ON_TIME_XP, REPEAT_XP, assignmentStatus, attemptXp, computeProgress, titleOf } from './progress.js';
 
 const API_TIMEOUT_MS = 20_000;
 const SUBJECT_KEY = 'ai-stem-lab:subject';
@@ -222,10 +223,33 @@ async function selectSubject(id) {
 
 // ---------- Аккаунт ----------
 
+// Последний посчитанный прогресс — чтобы после работы показать прибавку опыта и новый уровень
+let lastProgress = null;
+let lastAssignments = [];
+const LOCAL_RESULTS_KEY = 'ai-stem-lab:results';
+
 async function saveResult(lessonId, stats) {
-  if (!user) return;
-  const res = await account.saveResult(lessonId, stats);
-  if (!res.ok) toast(`Результат не сохранён: ${res.error}`);
+  const row = { lesson_id: lessonId, q_ok: stats.qOk, q_total: stats.qTotal, hyp_ok: stats.hypOk, hyp_total: stats.hypTotal, completed_at: new Date().toISOString() };
+  const first = !lastProgress?.done.has(lessonId);
+  const due = lastAssignments.find((a) => a.lesson_id === lessonId)?.due_date;
+  const onTime = first && due && new Date() <= new Date(`${due}T23:59:59`);
+  const gain = (first ? attemptXp(row) : REPEAT_XP) + (onTime ? ON_TIME_XP : 0);
+  if (user) {
+    const res = await account.saveResult(lessonId, stats);
+    if (!res.ok) return toast(`Результат не сохранён: ${res.error}`);
+  } else {
+    // Демо-режим: результаты хранятся только в этом браузере
+    try {
+      const list = JSON.parse(localStorage.getItem(LOCAL_RESULTS_KEY) ?? '[]');
+      list.push(row);
+      localStorage.setItem(LOCAL_RESULTS_KEY, JSON.stringify(list));
+    } catch {
+      // без хранилища прогресс просто не запомнится
+    }
+  }
+  const newXp = (lastProgress?.xp ?? 0) + gain;
+  const levelUp = lastProgress && newXp >= lastProgress.to;
+  toast(levelUp ? `+${gain} XP · Новый уровень ${lastProgress.level + 1}!` : `+${gain} XP`);
 }
 
 function setUser(profile) {
@@ -303,20 +327,31 @@ function greetingWord() {
   return h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
 }
 
-// Сводка по работам ученика: из аккаунта (с баллами) или, в демо-режиме, из этого браузера.
+// Сводка ученика: результаты с баллами и задания класса (из аккаунта или, в демо-режиме, из браузера)
 async function loadProgress() {
-  const done = loadCompleted();
-  const latest = new Map();
+  let results = [];
+  let assignments = [];
   if (user?.role === 'student') {
-    const res = await account.loadMyResults(user.id);
-    if (res.ok) {
-      for (const r of res.value) {
-        done.add(r.lesson_id);
-        latest.set(r.lesson_id, r);
-      }
+    const res = await account.loadMyScores(user.id);
+    if (res.ok) results = res.value;
+    if (user.class) {
+      const a = await account.loadClassAssignments(user.class.id);
+      if (a.ok) assignments = a.value;
     }
+  } else if (!user) {
+    try {
+      results = JSON.parse(localStorage.getItem(LOCAL_RESULTS_KEY) ?? '[]');
+    } catch {
+      results = [];
+    }
+    // Работы, пройденные до появления журнала результатов, засчитываем без баллов
+    const known = new Set(results.map((r) => r.lesson_id));
+    for (const id of loadCompleted()) if (!known.has(id)) results.push({ lesson_id: id, q_ok: 0, q_total: 0, hyp_ok: 0, hyp_total: 0, completed_at: new Date(0).toISOString() });
   }
-  return { done, latest };
+  const progress = computeProgress(results, ALL_LESSONS, assignments);
+  lastProgress = progress;
+  lastAssignments = assignments;
+  return { progress, assignments, done: progress.done };
 }
 
 // Плитка: либо превью сцены сверху (thumb — промис с SVG), либо линейная иконка слева
@@ -349,38 +384,15 @@ async function renderMenu() {
   $('greetWord').textContent = greetingWord();
   $('greetName').textContent = user ? user.full_name.split(' ')[0] : 'гость';
 
-  const { done, latest } = await loadProgress();
-  const next = ALL_LESSONS.findIndex((l) => !done.has(l.id));
-  renderBanner(next);
-
-  // Карточка общего прогресса
-  const count = ALL_LESSONS.filter((l) => done.has(l.id)).length;
-  $('statValue').textContent = String(count);
-  $('statTotal').textContent = `/ ${ALL_LESSONS.length} работ`;
-  $('statProgress').style.width = `${(count / ALL_LESSONS.length) * 100}%`;
-  const scored = [...latest.values()].filter((r) => r.q_total > 0);
-  const ok = scored.reduce((s, r) => s + r.q_ok, 0);
-  const total = scored.reduce((s, r) => s + r.q_total, 0);
-  $('statBadge').textContent = count === ALL_LESSONS.length ? 'Практикум завершён' : count ? 'В процессе' : 'Практикум не начат';
-  $('statNote').textContent = total
-    ? `Верных ответов на контрольные вопросы: ${Math.round((ok / total) * 100)}%`
-    : 'Выполните работу, чтобы увидеть результаты.';
-
-  // Прогресс по предметам
-  $('checklist').replaceChildren(...SUBJECTS.map((s) => {
-    const lessons = ALL_LESSONS.filter((l) => l.subject === s.id);
-    const n = lessons.filter((l) => done.has(l.id)).length;
-    const li = el('li', 'subject-progress');
-    li.style.setProperty('--c', s.color);
-    const bar = el('div', 'progress');
-    const fill = el('div', 'progress-bar');
-    fill.style.width = `${(n / lessons.length) * 100}%`;
-    bar.append(fill);
-    const head = el('div', 'subject-progress-head');
-    head.append(el('span', 'subject-dot'), el('span', '', s.name), el('span', 'muted', `${n} / ${lessons.length}`));
-    li.append(head, bar);
-    return li;
-  }));
+  const { progress, assignments, done } = await loadProgress();
+  // Сначала — невыполненное задание учителя с ближайшим сроком, потом — следующая работа по порядку
+  const todo = assignments.filter((a) => !done.has(a.lesson_id))
+    .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))[0];
+  const assigned = todo ? ALL_LESSONS.findIndex((l) => l.id === todo.lesson_id) : -1;
+  const next = assigned >= 0 ? assigned : ALL_LESSONS.findIndex((l) => !done.has(l.id));
+  renderBanner(next, assigned >= 0);
+  $('gamePanel').hidden = user?.role === 'teacher';
+  if (user?.role !== 'teacher') renderGame(progress, assignments);
 
   // Раздел выбранного в навигации предмета
   $('subjectSections').replaceChildren(...SUBJECTS.filter((s) => s.id === subject).map((s) => {
@@ -454,6 +466,66 @@ async function renderMenu() {
   }));
 }
 
+function renderGame(p, assignments) {
+  $('levelNum').textContent = String(p.level);
+  $('levelTitle').textContent = titleOf(p.level);
+  const inLevel = p.xp - p.from;
+  const span = p.to - p.from;
+  $('xpText').textContent = `${p.xp} XP`;
+  $('xpNext').textContent = `до уровня ${p.level + 1}: ${p.to - p.xp} XP`;
+  $('xpBar').style.width = `${Math.round((inLevel / span) * 100)}%`;
+  $('levelRing').style.setProperty('--p', `${Math.round((inLevel / span) * 360)}deg`);
+  $('streak').textContent = p.streak ? `🔥 ${plural(p.streak, 'день', 'дня', 'дней')} подряд` : '🔥 Серия: 0 дней';
+  $('doneCount').textContent = `✓ ${p.done.size} из ${ALL_LESSONS.length} работ`;
+
+  $('checklist').replaceChildren(...SUBJECTS.map((s) => {
+    const { done, total } = p.subjects[s.id];
+    const li = el('li', 'subject-progress');
+    li.style.setProperty('--c', s.color);
+    const bar = el('div', 'progress');
+    const fill = el('div', 'progress-bar');
+    fill.style.width = `${(done / total) * 100}%`;
+    bar.append(fill);
+    const head = el('div', 'subject-progress-head');
+    head.append(el('span', 'subject-dot'), el('span', '', s.name), el('span', 'muted', `${done} / ${total}`));
+    li.append(head, bar);
+    return li;
+  }));
+
+  // Задания от учителя
+  const card = $('assignmentsCard');
+  card.hidden = !user?.class;
+  if (user?.class) {
+    const open = assignments.filter((a) => !p.done.has(a.lesson_id)).length;
+    $('assignCount').textContent = assignments.length ? `осталось ${open}` : '';
+    $('assignmentList').replaceChildren(...(assignments.length ? assignments.map((a) => {
+      const i = ALL_LESSONS.findIndex((l) => l.id === a.lesson_id);
+      const l = ALL_LESSONS[i];
+      if (!l) return el('span');
+      const st = assignmentStatus(a, p.done);
+      const row = el('button', `assignment ${st.key}`);
+      row.type = 'button';
+      row.onclick = () => openLesson(i);
+      const subj = SUBJECT_BY_ID[l.subject];
+      const dot = el('span', 'subject-dot');
+      dot.style.background = subj.color;
+      const text = el('span', 'assignment-text');
+      text.append(el('b', '', l.short ?? l.title), el('span', 'muted small', `${subj.name} · работа № ${l.number}`));
+      row.append(dot, text, el('span', `status ${st.key}`, st.text));
+      return row;
+    }) : [el('p', 'muted small', 'Учитель пока не назначил заданий. Можно выполнять любые работы ниже.')]));
+  }
+
+  // Значки
+  $('badgeCount').textContent = `${p.badges.filter((b) => b.got).length} / ${p.badges.length}`;
+  $('badgeGrid').replaceChildren(...p.badges.map((b) => {
+    const item = el('div', `badge-item ${b.got ? 'got' : 'locked'}`);
+    item.title = b.desc;
+    item.append(el('span', 'badge-icon', b.icon), el('span', 'badge-name', b.name), el('span', 'badge-desc', b.desc));
+    return item;
+  }));
+}
+
 // Открытая тема в каждом предмете: сохраняется, пока ученик переходит между работами и дашбордом.
 const openTopics = {};
 
@@ -476,7 +548,7 @@ function topicTiles(t, done) {
   return tiles;
 }
 
-function renderBanner(next) {
+function renderBanner(next, assigned = false) {
   const btn = $('bannerBtn');
   $('joinForm').hidden = true;
   btn.hidden = false;
@@ -488,9 +560,9 @@ function renderBanner(next) {
     btn.textContent = 'Войти';
     btn.onclick = () => show('auth');
   } else if (user.role === 'teacher') {
-    $('bannerTitle').textContent = `Класс ${user.class?.name ?? user.grade}`;
-    $('bannerSub').textContent = `Код класса для учеников: ${user.class?.code ?? '—'}. Ученики вводят его при регистрации.`;
-    btn.textContent = 'Результаты класса';
+    $('bannerTitle').textContent = 'Кабинет учителя';
+    $('bannerSub').textContent = 'Создавайте классы, назначайте лабораторные работы и следите за прогрессом учеников.';
+    btn.textContent = 'Мои классы';
     btn.onclick = openTeacher;
   } else if (!user.class) {
     $('bannerTitle').textContent = 'Вступите в класс';
@@ -499,9 +571,9 @@ function renderBanner(next) {
     btn.hidden = true;
   } else if (next >= 0) {
     const l = ALL_LESSONS[next];
-    $('bannerTitle').textContent = next === 0 ? 'Начните практикум' : 'Продолжите практикум';
-    $('bannerSub').textContent = `Следующая работа: ${SUBJECT_BY_ID[l.subject].name}, № ${l.number}. ${l.title}`;
-    btn.textContent = next === 0 ? 'Начать' : 'Продолжить';
+    $('bannerTitle').textContent = assigned ? 'Задание от учителя' : next === 0 ? 'Начните практикум' : 'Продолжите практикум';
+    $('bannerSub').textContent = `${assigned ? '' : 'Следующая работа: '}${SUBJECT_BY_ID[l.subject].name}, № ${l.number}. ${l.title}`;
+    btn.textContent = assigned ? 'Выполнить' : next === 0 ? 'Начать' : 'Продолжить';
     btn.onclick = () => openLesson(next);
   } else {
     $('bannerTitle').textContent = 'Все лабораторные работы выполнены';
@@ -586,54 +658,237 @@ $('logoutBtn').addEventListener('click', async () => {
 
 // ---------- Учитель ----------
 
-async function openTeacher() {
-  $('teacherClass').textContent = user.class?.name ?? user.grade;
-  $('teacherCode').textContent = user.class?.code ?? '—';
-  $('classTable').replaceChildren(el('p', 'muted', 'Загрузка…'));
-  show('teacher', 'Результаты класса');
-  if (!user.class) return $('classTable').replaceChildren(el('p', 'muted', 'Класс не найден.'));
+let teacherClasses = [];
+let activeClassId = null;
 
-  const res = await account.loadClassResults(user.class.id);
-  if (!res.ok) return $('classTable').replaceChildren(el('p', 'plan-error', res.error));
+async function openTeacher() {
+  show('teacher', 'Мои классы');
+  await loadTeacher();
+}
+
+async function loadTeacher() {
+  teacherError(null);
+  const res = await account.loadTeacherClasses(user.id);
+  if (!res.ok) return teacherError(res.error);
+  teacherClasses = res.value;
+  if (!teacherClasses.some((k) => k.id === activeClassId)) activeClassId = teacherClasses[0]?.id ?? null;
+  renderClassTabs();
+  await renderClassPanel();
+}
+
+function teacherError(msg) {
+  const p = document.querySelector('.teacher-error');
+  p.hidden = !msg;
+  p.textContent = msg ?? '';
+}
+
+function renderClassTabs() {
+  $('classTabs').replaceChildren(...teacherClasses.map((k) => {
+    const b = el('button', k.id === activeClassId ? 'class-tab active' : 'class-tab', k.name);
+    b.type = 'button';
+    b.onclick = async () => {
+      activeClassId = k.id;
+      renderClassTabs();
+      await renderClassPanel();
+    };
+    return b;
+  }));
+  if (!teacherClasses.length) $('classTabs').replaceChildren(el('p', 'muted', 'Классов пока нет — создайте первый класс.'));
+}
+
+async function renderClassPanel() {
+  const k = teacherClasses.find((x) => x.id === activeClassId);
+  $('classPanel').hidden = !k;
+  if (!k) return;
+  $('classCode').textContent = k.code;
+  $('classTable').replaceChildren(el('p', 'muted', 'Загрузка…'));
+
+  const [res, asg] = await Promise.all([account.loadClassResults(k.id), account.loadClassAssignments(k.id)]);
+  if (!res.ok) return teacherError(res.error);
+  if (!asg.ok) return teacherError(asg.error);
   const { students, results } = res.value;
-  if (!students.length) {
-    return $('classTable').replaceChildren(el('p', 'muted', 'В классе пока нет учеников. Сообщите им код класса.'));
+  const assignments = asg.value;
+  const doneBy = (sid, lid) => results.some((r) => r.user_id === sid && r.lesson_id === lid);
+
+  // Сводка: доля выполненных назначенных работ по всем ученикам
+  const cells = students.length * assignments.length;
+  const doneCells = assignments.reduce((sum, a) => sum + students.filter((s) => doneBy(s.id, a.lesson_id)).length, 0);
+  $('statStudents').textContent = String(students.length);
+  $('statAssigned').textContent = String(assignments.length);
+  $('statCompletion').textContent = cells ? `${Math.round((doneCells / cells) * 100)}%` : '—';
+
+  // Выбор работы для назначения: только ещё не назначенные, по предметам
+  const select = document.querySelector('#assignForm select');
+  select.replaceChildren(new Option('Выберите работу…', ''), ...SUBJECTS.map((s) => {
+    const g = document.createElement('optgroup');
+    g.label = s.name;
+    ALL_LESSONS.filter((l) => l.subject === s.id && !assignments.some((a) => a.lesson_id === l.id))
+      .forEach((l) => g.append(new Option(`№ ${l.number}. ${l.short ?? l.title}`, l.id)));
+    return g;
+  }));
+
+  // Таблица заданий
+  if (!assignments.length) {
+    $('assignTable').replaceChildren(el('p', 'muted small', 'Заданий пока нет. Выберите работу и срок выше.'));
+  } else {
+    $('assignTable').replaceChildren(...assignments.map((a) => {
+      const l = ALL_LESSONS.find((x) => x.id === a.lesson_id);
+      const n = students.filter((s) => doneBy(s.id, a.lesson_id)).length;
+      const row = el('div', 'assign-row');
+      const subj = SUBJECT_BY_ID[l?.subject] ?? SUBJECTS[0];
+      const dot = el('span', 'subject-dot');
+      dot.style.background = subj.color;
+      const info = el('span', 'assignment-text');
+      info.append(el('b', '', l ? `${subj.short}${l.number}. ${l.short ?? l.title}` : a.lesson_id), el('span', 'muted small', a.due_date ? `срок: ${new Date(`${a.due_date}T00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` : 'без срока'));
+      const bar = el('div', 'progress mini-bar');
+      const fill = el('div', 'progress-bar');
+      fill.style.width = students.length ? `${(n / students.length) * 100}%` : '0%';
+      bar.append(fill);
+      const del = el('button', 'ghost small', 'Снять');
+      del.type = 'button';
+      del.onclick = async () => {
+        const r = await account.unassign(a.id);
+        if (!r.ok) return teacherError(r.error);
+        await renderClassPanel();
+      };
+      row.append(dot, info, bar, el('span', 'muted small', `${n}/${students.length}`), del);
+      return row;
+    }));
   }
 
+  // Таблица учеников: назначенные работы (или все, если заданий нет) + итог
+  if (!students.length) {
+    $('classTable').replaceChildren(el('p', 'muted', `Учеников пока нет. Сообщите им код класса ${k.code}.`));
+    return;
+  }
+  const columns = assignments.length ? assignments.map((a) => ALL_LESSONS.find((l) => l.id === a.lesson_id)).filter(Boolean) : ALL_LESSONS;
   const table = el('table', 'journal-table');
   const head = table.createTHead().insertRow();
-  head.append(el('th', '', 'Ученик'));
-  ALL_LESSONS.forEach((l) => {
-    const subject = SUBJECT_BY_ID[l.subject];
-    const th = el('th', 'subject-th', `${subject.short}${l.number}`);
-    th.title = `${subject.name}: ${l.title}`;
-    th.style.color = subject.color;
+  head.append(el('th', '', 'Ученик'), el('th', '', 'Уровень'));
+  for (const l of columns) {
+    const subj = SUBJECT_BY_ID[l.subject];
+    const th = el('th', 'subject-th', `${subj.short}${l.number}`);
+    th.title = `${subj.name}: ${l.title}`;
+    th.style.color = subj.color;
     head.append(th);
-  });
+  }
+  head.append(el('th', '', ''));
   const body = table.createTBody();
   for (const s of students) {
+    const mine = results.filter((r) => r.user_id === s.id);
+    const p = computeProgress(mine, ALL_LESSONS, assignments);
     const tr = body.insertRow();
     tr.insertCell().textContent = s.full_name;
-    for (const l of ALL_LESSONS) {
-      // Показываем последнюю попытку: учителю важен текущий уровень ученика.
-      const last = results.filter((r) => r.user_id === s.id && r.lesson_id === l.id).at(-1);
+    tr.insertCell().textContent = `${p.level} · ${p.xp} XP`;
+    for (const l of columns) {
+      const last = mine.filter((r) => r.lesson_id === l.id).at(-1);
       const td = tr.insertCell();
       if (!last) {
-        td.textContent = '—';
-        td.className = 'empty-cell';
+        const a = assignments.find((x) => x.lesson_id === l.id);
+        const late = a && assignmentStatus(a, new Set()).key === 'late';
+        td.textContent = late ? 'просрочено' : '—';
+        td.className = late ? 'no' : 'empty-cell';
         continue;
       }
       td.textContent = `${last.q_ok}/${last.q_total}`;
       td.className = last.q_ok === last.q_total ? 'ok' : 'no';
-      td.title = `Контрольные вопросы ${last.q_ok}/${last.q_total}, гипотезы ${last.hyp_ok}/${last.hyp_total}. `
-        + `Выполнено ${new Date(last.completed_at).toLocaleString('ru-RU')}`;
+      td.title = `Контрольные вопросы ${last.q_ok}/${last.q_total}, гипотезы ${last.hyp_ok}/${last.hyp_total}. Выполнено ${new Date(last.completed_at).toLocaleString('ru-RU')}`;
     }
+    const act = tr.insertCell();
+    const rm = el('button', 'ghost small', 'Убрать');
+    rm.type = 'button';
+    rm.onclick = () => confirmAction(`Убрать ученика «${s.full_name}» из класса? Его результаты сохранятся.`, 'Убрать', async () => {
+      const r = await account.removeStudent(s.id);
+      if (!r.ok) return teacherError(r.error);
+      await renderClassPanel();
+    });
+    act.append(rm);
   }
   const wrap = el('div', 'table-wrap');
   wrap.append(table);
-  const legend = el('p', 'muted small', 'Х — химия, Ф — физика, Б — биология. В ячейке — верные ответы на контрольные вопросы (последняя попытка), зелёным — все верно. Наведите курсор, чтобы увидеть подробности.');
+  const legend = el('p', 'muted small', assignments.length
+    ? 'Показаны назначенные работы. В ячейке — верные ответы на контрольные вопросы (последняя попытка), зелёным — все верно.'
+    : 'Заданий нет — показаны все работы. Х — химия, Ф — физика, Б — биология.');
   $('classTable').replaceChildren(wrap, legend);
 }
+
+// Подтверждение опасных действий внутри страницы (без системных диалогов)
+function confirmAction(text, yesLabel, onYes) {
+  $('confirmText').textContent = text;
+  $('confirmYes').textContent = yesLabel;
+  $('confirmBox').hidden = false;
+  $('confirmNo').onclick = () => { $('confirmBox').hidden = true; };
+  $('confirmYes').onclick = async () => {
+    $('confirmBox').hidden = true;
+    await onYes();
+  };
+}
+
+$('newClassForm').addEventListener('submit', withBusy($('newClassForm'), async (fd) => {
+  const name = String(fd.get('name')).trim();
+  if (!name) return;
+  const r = await account.createClass(name);
+  if (!r.ok) return teacherError(r.error);
+  activeClassId = r.value?.id ?? activeClassId;
+  $('newClassForm').reset();
+  await loadTeacher();
+  toast(`Класс «${name}» создан. Код: ${r.value?.code ?? ''}`);
+}));
+
+$('assignForm').addEventListener('submit', withBusy($('assignForm'), async (fd) => {
+  const lessonId = fd.get('lesson');
+  if (!lessonId) return;
+  const r = await account.assignLesson(activeClassId, lessonId, fd.get('due'));
+  if (!r.ok) return teacherError(r.error);
+  $('assignForm').reset();
+  await renderClassPanel();
+}));
+
+$('copyCode').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('classCode').textContent);
+    toast('Код скопирован');
+  } catch {
+    toast(`Код класса: ${$('classCode').textContent}`);
+  }
+});
+
+$('renameClass').addEventListener('click', () => {
+  const k = teacherClasses.find((x) => x.id === activeClassId);
+  if (!k) return;
+  // Переименование — прямо в вкладке класса
+  const tab = document.querySelector('.class-tab.active');
+  const input = Object.assign(document.createElement('input'), { value: k.name, maxLength: 10, className: 'class-rename' });
+  tab.replaceWith(input);
+  input.focus();
+  let saved = false;
+  const save = async (keep = true) => {
+    if (saved) return;
+    saved = true;
+    const name = keep ? input.value.trim() : '';
+    if (name && name !== k.name) {
+      const r = await account.renameClass(k.id, name);
+      if (!r.ok) teacherError(r.error);
+    }
+    await loadTeacher();
+  };
+  input.addEventListener('blur', () => save());
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') save(false);
+  });
+});
+
+$('deleteClass').addEventListener('click', () => {
+  const k = teacherClasses.find((x) => x.id === activeClassId);
+  if (!k) return;
+  confirmAction(`Удалить класс «${k.name}»? Задания класса удалятся, ученики останутся без класса, их результаты сохранятся.`, 'Удалить', async () => {
+    const r = await account.deleteClass(k.id);
+    if (!r.ok) return teacherError(r.error);
+    activeClassId = null;
+    await loadTeacher();
+  });
+});
 
 // ---------- Стол ----------
 

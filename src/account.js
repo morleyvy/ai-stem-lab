@@ -44,6 +44,7 @@ function humanError(error) {
   if (/already registered|already exists/i.test(msg)) return 'Этот номер уже зарегистрирован. Войдите.';
   if (/invalid login credentials/i.test(msg)) return 'Неверный номер или пароль.';
   if (/class not found/i.test(msg)) return 'Класс с таким кодом не найден. Проверьте код у учителя.';
+  if (/relation .*assignments.* does not exist|assignments/i.test(msg) && /exist|schema cache/i.test(msg)) return 'В базе нет таблицы заданий: выполните supabase/002_classes_assignments.sql в Supabase.';
   if (/rate limit|too many/i.test(msg)) return 'Слишком много попыток. Подождите минуту.';
   if (/fetch|network/i.test(msg)) return 'Нет связи с сервером. Проверьте интернет.';
   if (/(signups|logins) are disabled/i.test(msg)) return 'Вход отключён в настройках Supabase: включите провайдер Email (Authentication → Sign In / Providers).';
@@ -148,4 +149,56 @@ export function loadClassResults(classId) {
       : [];
     return { students, results };
   });
+}
+
+// ---------- Ученик: полные результаты и задания ----------
+
+export function loadMyScores(userId) {
+  return run(async () => unwrap(await supabase.from('results')
+    .select('lesson_id, hyp_ok, hyp_total, q_ok, q_total, completed_at')
+    .eq('user_id', userId).order('completed_at')));
+}
+
+export function loadClassAssignments(classId) {
+  return run(async () => unwrap(await supabase.from('assignments')
+    .select('id, lesson_id, due_date, created_at').eq('class_id', classId).order('created_at')));
+}
+
+export function leaveClass() {
+  return run(async () => {
+    unwrap(await supabase.rpc('leave_class'));
+    return loadProfile();
+  });
+}
+
+// ---------- Учитель: классы и задания ----------
+
+export function loadTeacherClasses(teacherId) {
+  return run(async () => unwrap(await supabase.from('classes')
+    .select('id, name, code, created_at').eq('teacher_id', teacherId).order('created_at')));
+}
+
+export function createClass(name) {
+  return run(async () => unwrap(await supabase.rpc('create_teacher_class', { p_name: String(name).trim().slice(0, 10) })));
+}
+
+export function renameClass(classId, name) {
+  return run(async () => unwrap(await supabase.from('classes').update({ name: String(name).trim().slice(0, 10) }).eq('id', classId)));
+}
+
+export function deleteClass(classId) {
+  return run(async () => unwrap(await supabase.from('classes').delete().eq('id', classId)));
+}
+
+export function assignLesson(classId, lessonId, dueDate) {
+  return run(async () => unwrap(await supabase.from('assignments')
+    .upsert({ class_id: classId, lesson_id: lessonId, due_date: dueDate || null }, { onConflict: 'class_id,lesson_id' })));
+}
+
+export function unassign(assignmentId) {
+  return run(async () => unwrap(await supabase.from('assignments').delete().eq('id', assignmentId)));
+}
+
+export function removeStudent(studentId) {
+  return run(async () => unwrap(await supabase.rpc('remove_student', { p_student: studentId })));
 }

@@ -106,21 +106,31 @@
       <p class="form-error banner-error" hidden></p>
     </div>
 
-    <div class="dash-cards">
-      <div class="card dash-stat">
-        <div class="stat-top">
-          <span class="stat-bar-mini" aria-hidden="true"></span>
-          <span id="statBadge" class="pill-soft"></span>
+    <div id="gamePanel" class="game-panel">
+      <div class="card level-card">
+        <div class="level-top">
+          <div id="levelRing" class="level-ring"><span id="levelNum">1</span><small>уровень</small></div>
+          <div class="level-info">
+            <div id="levelTitle" class="level-title"></div>
+            <div class="xp-row"><span id="xpText"></span><span id="xpNext" class="muted small"></span></div>
+            <div class="progress xp-bar"><div id="xpBar" class="progress-bar"></div></div>
+            <div class="level-meta">
+              <span id="streak" class="meta-chip"></span>
+              <span id="doneCount" class="meta-chip"></span>
+            </div>
+          </div>
         </div>
-        <div class="stat-row">
-          <span id="statValue" class="stat-value">0</span>
-          <span id="statTotal" class="stat-total"></span>
-        </div>
-        <div class="progress"><div id="statProgress" class="progress-bar"></div></div>
-        <p id="statNote" class="muted small"></p>
+        <ol id="checklist" class="checklist subject-bars"></ol>
       </div>
-      <div class="card dash-check">
-        <ol id="checklist" class="checklist"></ol>
+
+      <div id="assignmentsCard" class="card assignments-card">
+        <div class="card-head"><h2>Задания от учителя</h2><span id="assignCount" class="pill"></span></div>
+        <div id="assignmentList" class="assignment-list"></div>
+      </div>
+
+      <div class="card badges-card">
+        <div class="card-head"><h2>Достижения</h2><span id="badgeCount" class="pill"></span></div>
+        <div id="badgeGrid" class="badge-grid"></div>
       </div>
     </div>
 
@@ -128,13 +138,55 @@
   </section>
 
   <!-- ---------- Учитель: результаты класса ---------- -->
-  <section id="teacher" class="dash" hidden>
-    <div class="home-intro">
-      <span class="tag">Учителю</span>
-      <h1>Результаты класса <span id="teacherClass"></span></h1>
-      <p>Код класса для учеников: <b id="teacherCode" class="code"></b>. Ученики вводят его при регистрации или в меню.</p>
+  <section id="teacher" class="dash teacher" hidden>
+    <div class="teacher-head">
+      <h1>Мои классы</h1>
+      <form id="newClassForm" class="inline-form">
+        <input name="name" maxlength="10" placeholder="Название, например 8Б" aria-label="Название нового класса" required />
+        <button type="submit" class="primary">Создать класс</button>
+      </form>
     </div>
-    <div class="card glass"><div id="classTable"></div></div>
+    <p class="form-error teacher-error" hidden></p>
+    <nav id="classTabs" class="class-tabs" aria-label="Классы"></nav>
+
+    <div id="classPanel" class="class-panel" hidden>
+      <div class="card class-summary">
+        <div>
+          <div class="muted small">Код для учеников</div>
+          <div class="code-row"><b id="classCode" class="code big-code"></b><button id="copyCode" type="button" class="ghost small">Скопировать</button></div>
+        </div>
+        <div class="summary-stats">
+          <div><b id="statStudents">0</b><span>учеников</span></div>
+          <div><b id="statAssigned">0</b><span>заданий</span></div>
+          <div><b id="statCompletion">0%</b><span>выполнено</span></div>
+        </div>
+        <div class="class-actions">
+          <button id="renameClass" type="button" class="ghost small">Переименовать</button>
+          <button id="deleteClass" type="button" class="ghost small danger">Удалить класс</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Задания</h2></div>
+        <form id="assignForm" class="assign-form">
+          <select name="lesson" aria-label="Лабораторная работа" required></select>
+          <input name="due" type="date" aria-label="Срок сдачи" />
+          <button type="submit" class="primary">Назначить</button>
+        </form>
+        <div id="assignTable"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Прогресс учеников</h2></div>
+        <div id="classTable"></div>
+      </div>
+    </div>
+    <div id="confirmBox" class="confirm" hidden>
+      <div class="confirm-box">
+        <p id="confirmText"></p>
+        <div class="actions"><button id="confirmNo" type="button" class="ghost">Отмена</button><button id="confirmYes" type="button" class="primary danger-bg">Удалить</button></div>
+      </div>
+    </div>
   </section>
 
   <!-- ---------- Рабочее место ---------- -->
