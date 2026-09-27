@@ -3,6 +3,7 @@
 // чем сильнее испарение. Рядом — настольный вентилятор с вращающимися лопастями и лампа сверху.
 
 import { beaker, bubblePool, createScene, floorShadow, readout, room, s, text } from '../kit.js';
+import { tr } from '../../i18n.js';
 import { sillPlants } from '../bioDecor.js';
 
 const PLANT_X = 500;
@@ -113,8 +114,8 @@ export function transpirationScene(container, params, set, { transpirationRate }
       vapor = bubblePool(svg, 24, { color: '#38bdf8' });
 
       // Табло на стене под окном: скорость испарения и влажность воздуха
-      evapReadout = readout(d, { x: 626, y: 282, w: 140, caption: 'испарение, мл/ч', color: '#38bdf8' });
-      humReadout = readout(d, { x: 780, y: 282, w: 140, caption: 'влажность воздуха', color: '#a5f3fc' });
+      evapReadout = readout(d, { x: 626, y: 282, w: 140, caption: tr('испарение, мл/ч'), color: '#38bdf8' });
+      humReadout = readout(d, { x: 780, y: 282, w: 140, caption: tr('влажность воздуха'), color: '#a5f3fc' });
       svg.append(evapReadout.g, humReadout.g);
     },
 
@@ -155,7 +156,7 @@ export function transpirationScene(container, params, set, { transpirationRate }
       lampGlow.setAttribute('opacity', on ? 1 : 0);
       lampBulb.setAttribute('fill', on ? '#fef08a' : '#e2e8f0');
 
-      evapReadout.set(`${fmt(rate)} мл/ч`);
+      evapReadout.set(tr(`${fmt(rate)} мл/ч`));
       humReadout.set(`${params.humidity}%`);
     },
   });

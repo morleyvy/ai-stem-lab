@@ -9,6 +9,7 @@ import { SHELF, SHELF_BY_ID } from '../data/shelf.js';
 import { bubblePool, createScene, INK, mixHex, room, s, shade, text } from './kit.js';
 import { buildRig } from './chem/rigs.js';
 import { createFx, foamLayer, splintNodes } from './chem/effects.js';
+import { tr } from '../i18n.js';
 
 const COLORLESS = '#b5d9f0';
 const SHELF_Y = 150; // верх полки — на ней стоят склянки
@@ -611,18 +612,27 @@ function drawItem(item, d) {
     s('rect', { x: -w / 2, y: -h, width: w, height: h, rx: 11, fill: d.lin([[0, '#e2e8f0', 0.9], [0.35, '#ffffff', 0.7], [1, '#cbd5e1', 0.9]]), stroke: '#94a3b8', 'stroke-width': 1.5 }),
     s('rect', { x: -w / 2 + 4, y: -h * 0.74, width: w - 8, height: h * 0.74 - 4, rx: 8, fill: liquidColor, 'fill-opacity': 0.8 }),
     s('rect', { x: -w / 2 + 4, y: -h * 0.74, width: w - 8, height: h * 0.74 - 4, rx: 8, fill: d.lin([[0, '#0f172a', 0.18], [0.35, '#ffffff', 0.2], [1, '#0f172a', 0.25]]) }),
+    // блик на стекле — под этикеткой, чтобы не перечёркивать подпись
+    s('rect', { x: -w / 2 + 5, y: -h + 8, width: 4, height: h - 22, rx: 2, fill: '#ffffff', 'fill-opacity': 0.8 }),
     // бумажная этикетка: формула и концентрация
     s('rect', { x: -w / 2 + 3, y: -h * 0.6, width: w - 6, height: small ? 22 : 32, rx: 3, fill: '#ffffff', stroke: '#e2e8f0' }),
     text(0, -h * 0.6 + (small ? 8 : 11), item.label, { size: small ? 9 : 12, weight: 800, fill: INK }),
-    text(0, -h * 0.6 + (small ? 16 : 24), item.note, { size: small ? 7 : 9, weight: 500, fill: '#64748b' }),
-    // блик
-    s('rect', { x: -w / 2 + 5, y: -h + 8, width: 4, height: h - 22, rx: 2, fill: '#ffffff', 'fill-opacity': 0.8 }),
+    fitText(text(0, -h * 0.6 + (small ? 16 : 24), tr(item.note), { size: small ? 7 : 9, weight: 500, fill: '#64748b' }), tr(item.note), small ? 7 : 9, w - 8),
     // горлышко и крышка / груша пипетки
     s('rect', { x: -w * 0.2, y: -h - 10, width: w * 0.4, height: 12, fill: d.lin(['#cbd5e1', '#f8fafc', '#cbd5e1']), stroke: '#94a3b8', 'stroke-width': 1.5 }),
     small
       ? s('ellipse', { cx: 0, cy: -h - 20, rx: 11, ry: 13, fill: d.rad([shade(item.cap, 0.35), item.cap, shade(item.cap, -0.35)]) })
       : s('rect', { x: -w * 0.3, y: -h - 26, width: w * 0.6, height: 18, rx: 5, fill: d.lin([shade(item.cap, -0.25), shade(item.cap, 0.3), shade(item.cap, -0.3)]) }),
   ]);
+}
+
+// Длинная подпись на узкой этикетке (капельница «индикатор») сжимается по ширине, а не вылезает за край
+function fitText(node, value, size, maxW) {
+  if (String(value ?? '').length * size * 0.56 > maxW) {
+    node.setAttribute('textLength', maxW);
+    node.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+  }
+  return node;
 }
 
 function floorShadowSimple(rx) {

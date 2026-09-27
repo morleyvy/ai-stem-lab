@@ -5,6 +5,7 @@
 // шторами. Углы отмечены дугами без подписей, значения — на табло приборов.
 
 import { createScene, draggable, floorShadow, readout, room, s } from '../kit.js';
+import { tr } from '../../i18n.js';
 
 const DEG = Math.PI / 180;
 const cx = 480; // точка падения луча на границу сред
@@ -17,7 +18,9 @@ let filterUid = 0;
 
 export function refractionScene(container, params, set, { refractionAngle, MEDIA }) {
   let laser, aperture, apertureGlow, led, incidentRay, reflectedRay, refractedRay, alphaArc, betaArc, blockFill, alphaRead, betaRead, tirGlow, spotGlow, dust;
-  let power = 0; // плавное включение: луч «разгорается» за доли секунды, а не вспыхивает мгновенно
+  // Плавное включение: луч «разгорается» за доли секунды, а не вспыхивает мгновенно.
+  // Сцена, собранная с уже включённым лазером (превью, возврат к работе), сразу светит.
+  let power = params.laser ? 1 : 0;
   const segments = []; // видимые отрезки лучей текущего кадра — вдоль них вспыхивают пылинки
 
   // Точка на дуге радиуса r под углом deg от нормали, на стороне away (−1 — вверх/воздух, +1 — вниз/среда)
@@ -99,8 +102,8 @@ export function refractionScene(container, params, set, { refractionAngle, MEDIA
       svg.append(laser);
 
       // Табло углов на стойках по краям стола
-      alphaRead = readout(d, { x: 90, y: 150, w: 130, caption: 'угол падения α', color: '#f87171' });
-      betaRead = readout(d, { x: 740, y: 150, w: 130, caption: 'угол преломления β', color: '#4ade80' });
+      alphaRead = readout(d, { x: 90, y: 150, w: 130, caption: tr('угол падения α'), color: '#f87171' });
+      betaRead = readout(d, { x: 740, y: 150, w: 130, caption: tr('угол преломления β'), color: '#4ade80' });
       svg.append(alphaRead.g, betaRead.g);
     },
 
@@ -155,7 +158,7 @@ export function refractionScene(container, params, set, { refractionAngle, MEDIA
       betaArc.setAttribute('d', on && beta !== null ? arcSector(-beta, R * 0.4, -away) : '');
 
       alphaRead.set(`${Math.round(params.alpha)}°`);
-      betaRead.set(!params.laser ? '—' : beta === null ? 'п.в.о.' : `${Math.round(beta)}°`);
+      betaRead.set(!params.laser ? '—' : beta === null ? tr('п.в.о.') : `${Math.round(beta)}°`);
     },
   });
 

@@ -4,6 +4,7 @@
 // покачивается. Плавающее тело всплывает, нить провисает, динамометр показывает ноль.
 
 import { createScene, draggable, floorShadow, room, s, shade, text } from '../kit.js';
+import { tr } from '../../i18n.js';
 
 const BENCH_Y = 460;
 const VX = 600; // ось подвеса и сосуда
@@ -205,7 +206,7 @@ export function archimedesScene(container, params, set, { liquidOf, weight, G })
         r.setAttribute('fill', liq.color);
       }
       surface.setAttribute('cy', surf);
-      nameLabel.textContent = `${liq.name}, ${liq.density} кг/м³`;
+      nameLabel.textContent = `${tr(liq.name)}, ${liq.density} кг/м³`;
     },
   });
 

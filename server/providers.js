@@ -1,4 +1,5 @@
-// Провайдеры ИИ за одним интерфейсом generate({ system, user, schema }) → текст.
+// Провайдеры ИИ за одним интерфейсом generate({ system, user, schema, maxTokens? }) → текст.
+// maxTokens нужен длинным ответам (работа из конструктора — несколько тысяч токенов JSON).
 // Выбор по тому, какой ключ задан: GEMINI_API_KEY (бесплатный лимит) или ANTHROPIC_API_KEY.
 // Остальной код не знает, какая модель отвечает, — поменять провайдера можно одной переменной.
 
@@ -16,7 +17,7 @@ export class AiUnavailableError extends Error {}
 let gemini;
 let claude;
 
-async function generateGemini({ system, user, schema }) {
+async function generateGemini({ system, user, schema, maxTokens }) {
   gemini ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const response = await gemini.models.generateContent({
     model: GEMINI_MODEL,
@@ -24,7 +25,7 @@ async function generateGemini({ system, user, schema }) {
     config: {
       systemInstruction: system,
       // С запасом: у Gemini «размышления» модели тоже расходуют этот лимит.
-      maxOutputTokens: 4096,
+      maxOutputTokens: maxTokens ?? 4096,
       ...(schema && { responseMimeType: 'application/json', responseJsonSchema: schema }),
     },
   });
@@ -32,11 +33,11 @@ async function generateGemini({ system, user, schema }) {
   return response.text;
 }
 
-async function generateClaude({ system, user, schema }) {
+async function generateClaude({ system, user, schema, maxTokens }) {
   claude ??= new Anthropic();
   const message = await claude.messages.create({
     model: CLAUDE_MODEL,
-    max_tokens: 2000,
+    max_tokens: maxTokens ?? 2000,
     output_config: { effort: 'low', ...(schema && { format: { type: 'json_schema', schema } }) },
     system,
     messages: [{ role: 'user', content: user }],

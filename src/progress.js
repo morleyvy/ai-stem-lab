@@ -1,6 +1,10 @@
-// Игровой прогресс ученика: опыт (XP), уровни, серия дней, значки.
+// Прогресс ученика: баллы, уровни, серия дней, достижения.
 // Всё считается из результатов работ — отдельно ничего не хранится, поэтому прогресс
-// нельзя «накрутить» с клиента и он совпадает с тем, что видит учитель.
+// совпадает с тем, что видит учитель. Результаты присылает сам клиент: база ограничивает
+// значения и частоту записей (миграция 003), так что сильно накрутить прогресс нельзя,
+// но сами ответы остаются самоотчётом ученика.
+
+import { locale, t } from './i18n.js';
 
 const BASE_XP = 100; // за выполненную работу
 const Q_XP = 20; // за каждый верный контрольный вопрос
@@ -21,8 +25,9 @@ export function levelOf(xp) {
   return { level: n, from: levelStart(n), to: levelStart(n + 1) };
 }
 
-const TITLES = ['Лаборант-стажёр', 'Лаборант', 'Младший исследователь', 'Исследователь', 'Старший исследователь', 'Научный сотрудник', 'Ведущий учёный', 'Профессор'];
-export const titleOf = (level) => TITLES[Math.min(level, TITLES.length) - 1];
+// Звания уровней 1–8 — ключи title.1 … title.8 в src/i18n/ui.js
+const TITLE_COUNT = 8;
+export const titleOf = (level) => t(`title.${Math.min(level, TITLE_COUNT)}`);
 
 const dayKey = (d) => {
   const x = new Date(d);
@@ -79,18 +84,19 @@ export function computeProgress(results, lessons, assignments = []) {
   const perfect = [...best.values()].filter((r) => r.q_total > 0 && r.q_ok === r.q_total).length;
   const streak = streakOf(results);
 
+  // Название и описание достижения — ключи badge.<id> и badge.<id>.desc в src/i18n/ui.js
   const badges = [
-    { id: 'first', name: 'Первый опыт', desc: 'Выполнить первую работу', icon: '🧪', got: done.size >= 1 },
-    { id: 'five', name: 'Практик', desc: 'Выполнить 5 работ', icon: '⚗️', got: done.size >= 5 },
-    { id: 'ten', name: 'Знаток', desc: 'Выполнить 10 работ', icon: '🔬', got: done.size >= 10 },
-    { id: 'chem', name: 'Химик', desc: 'Все работы по химии', icon: '🧫', got: bySubject('chemistry').done === bySubject('chemistry').total },
-    { id: 'phys', name: 'Физик', desc: 'Все работы по физике', icon: '⚡', got: bySubject('physics').done === bySubject('physics').total },
-    { id: 'bio', name: 'Биолог', desc: 'Все работы по биологии', icon: '🌱', got: bySubject('biology').done === bySubject('biology').total },
-    { id: 'perfect', name: 'Без ошибок', desc: '3 работы со всеми верными ответами', icon: '🎯', got: perfect >= 3 },
-    { id: 'streak', name: 'Три дня подряд', desc: 'Заниматься 3 дня подряд', icon: '🔥', got: streak >= 3 },
-    { id: 'ontime', name: 'Точно в срок', desc: 'Сдать 3 задания вовремя', icon: '⏰', got: onTime >= 3 },
-    { id: 'all', name: 'Магистр', desc: 'Выполнить все работы', icon: '🏆', got: done.size === lessons.length },
-  ];
+    { id: 'first', icon: 'flask', got: done.size >= 1 },
+    { id: 'five', icon: 'beakers', got: done.size >= 5 },
+    { id: 'ten', icon: 'microscope', got: done.size >= 10 },
+    { id: 'chem', icon: 'acids', got: bySubject('chemistry').done === bySubject('chemistry').total },
+    { id: 'phys', icon: 'electricity', got: bySubject('physics').done === bySubject('physics').total },
+    { id: 'bio', icon: 'plants', got: bySubject('biology').done === bySubject('biology').total },
+    { id: 'perfect', icon: 'target', got: perfect >= 3 },
+    { id: 'streak', icon: 'calendar', got: streak >= 3 },
+    { id: 'ontime', icon: 'clock', got: onTime >= 3 },
+    { id: 'all', icon: 'award', got: done.size === lessons.length },
+  ].map((b) => ({ ...b, name: t(`badge.${b.id}`), desc: t(`badge.${b.id}.desc`) }));
 
   return {
     xp,
@@ -105,15 +111,15 @@ export function computeProgress(results, lessons, assignments = []) {
 
 // Статус задания для ученика
 export function assignmentStatus(a, done) {
-  if (done.has(a.lesson_id)) return { key: 'done', text: 'Выполнено' };
-  if (!a.due_date) return { key: 'open', text: 'Без срока' };
+  if (done.has(a.lesson_id)) return { key: 'done', text: t('status.done') };
+  if (!a.due_date) return { key: 'open', text: t('status.noDue') };
   // Считаем в календарных днях: иначе в 00:30 срок «сегодня» выглядел бы как «завтра»
   const due = new Date(`${a.due_date}T00:00`);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const days = Math.round((due - today) / 86400000);
-  if (days < 0) return { key: 'late', text: 'Просрочено' };
-  if (days === 0) return { key: 'soon', text: 'Сдать сегодня' };
-  if (days === 1) return { key: 'soon', text: 'Сдать завтра' };
-  return { key: 'open', text: `Срок: ${new Date(due).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` };
+  if (days < 0) return { key: 'late', text: t('status.late') };
+  if (days === 0) return { key: 'soon', text: t('status.today') };
+  if (days === 1) return { key: 'soon', text: t('status.tomorrow') };
+  return { key: 'open', text: t('status.due', { date: new Date(due).toLocaleDateString(locale, { day: 'numeric', month: 'long' }) }) };
 }

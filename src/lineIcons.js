@@ -16,6 +16,14 @@ const PATHS = {
   human: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/><path d="M5 12h4l2-3 2 5 2-2h4"/>',
   microbes: '<circle cx="9" cy="10" r="4.5"/><circle cx="16" cy="15" r="3.5"/><path d="M9 5.5V3M13.5 10H16M9 14.5V17M4.5 10H3M16 11.5V10M19.5 15H21"/>',
   genetics: '<path d="M7 3c0 6 10 6 10 12s-10 6-10 6"/><path d="M17 3c0 6-10 6-10 12s10 6 10 6"/><path d="M8.5 7h7M8.5 17h7M10 12h4"/>',
+  // Достижения
+  flask: '<path d="M9 3h6"/><path d="M10 3v13a2 2 0 0 0 4 0V3"/><path d="M10 11h4"/>',
+  beakers: '<path d="M4 6h7v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M13 9h7v9a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2z"/><path d="M4 13h7M13 15h7"/>',
+  microscope: '<path d="M6 21h12"/><path d="M9 18h6"/><path d="M12 18a6 6 0 0 0 5-9"/><path d="M8 3l4 2-3 6-4-2z"/><path d="M11 11l1.5 1"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8.5 14.5l2 2 4-4"/>',
+  clock: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/>',
+  award: '<circle cx="12" cy="9" r="6"/><path d="M8.5 13.8L7 22l5-3 5 3-1.5-8.2"/>',
   // Инструменты
   tools: '<rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4"/><circle cx="12" cy="3" r="1"/><path d="M9 12v1M15 12v1M9.5 16h5"/>',
 };
@@ -40,4 +48,21 @@ const TOPIC_ICON = {
 export function lineIcon(name) {
   const key = TOPIC_ICON[name] ?? name;
   return `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[key] ?? PATHS.tools}</svg>`;
+}
+
+// Объёмные иконки тем (public/icons, 192×192 WebP). Линейная иконка остаётся запасной для тем без картинки.
+// «Инструменты» — это лаборатория и ИИ-ассистент, поэтому их представляет маскот.
+const TOPIC_IMAGE = {
+  metals: 'metals', acids: 'acids', rate: 'rate',
+  mechanics: 'mechanics', electricity: 'electricity', optics: 'optics', heat: 'heat',
+  cell: 'cell', plants: 'plants', human: 'human', microbes: 'microbes', genetics: 'genetics',
+  tools: 'mascot',
+};
+
+export function topicIcon(name) {
+  const file = TOPIC_IMAGE[TOPIC_ICON[name] ?? name];
+  // Картинка декоративная: название темы уже написано рядом текстом
+  return file
+    ? `<img src="/icons/${file}.webp" alt="" width="44" height="44" loading="lazy" decoding="async">`
+    : lineIcon(name);
 }

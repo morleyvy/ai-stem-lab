@@ -19,8 +19,8 @@ import { YEAST } from '../sims/yeast.js';
 
 export const SUBJECTS = [
   { id: 'chemistry', name: 'Химия', short: 'Х', color: '#1a5cff', soft: '#e9f0ff' },
-  { id: 'physics', name: 'Физика', short: 'Ф', color: '#f97316', soft: '#fff1e6' },
-  { id: 'biology', name: 'Биология', short: 'Б', color: '#10b981', soft: '#e6f8f0' },
+  { id: 'physics', name: 'Физика', short: 'Ф', color: '#7c3aed', soft: '#f5f3ff' },
+  { id: 'biology', name: 'Биология', short: 'Б', color: '#047857', soft: '#e6f8f0' },
 ];
 export const SUBJECT_BY_ID = Object.fromEntries(SUBJECTS.map((s) => [s.id, s]));
 
@@ -56,3 +56,21 @@ export const TOPICS = {
     { name: 'Генетика', lessons: ['genetics'], sims: ['genetics'] },
   ],
 };
+
+// ---------- Классы 7–11 ----------
+
+// Классы, для которых строится программа. Химия и физика в школах Казахстана начинаются с 7 класса.
+export const GRADES = [7, 8, 9, 10, 11];
+
+// Класс из профиля: ученик хранит «8», «8А» (validateRegistration убирает пробелы и приводит к верхнему регистру),
+// учитель — название класса («8Б», «Физика-9»…). Берём ведущее число, только если это 7–11,
+// иначе фильтр по умолчанию — «Все», а не случайный класс.
+export function parseGrade(value) {
+  const m = /^\s*(\d{1,2})(?!\d)/.exec(String(value ?? ''));
+  const n = m ? Number(m[1]) : NaN;
+  return GRADES.includes(n) ? n : null;
+}
+
+// Свободный опыт на симуляции относится к тому же классу, что и работа на этой симуляции:
+// отдельного поля в src/sims нет, чтобы класс не приходилось держать в двух местах.
+export const SIM_GRADE = Object.fromEntries(ALL_LESSONS.filter((l) => l.sim && l.grade).map((l) => [l.sim, l.grade]));

@@ -5,6 +5,7 @@
 // До этого монитор в режиме ожидания и частоту не показывает.
 
 import { createScene, floorShadow, readout, s, shade, text, W, H } from '../kit.js';
+import { tr } from '../../i18n.js';
 
 const FLOOR = 420; // линия стыка стены и пола
 const HEART = { x: 105, y: 236, k: 0.6 };
@@ -12,11 +13,11 @@ const MONITOR = { x: 380, y: 36, w: 250, h: 176 };
 const TREADMILL = { x: 792, bottom: 470, w: 280 };
 const CLOCK = { x: 112, y: 96, r: 46 };
 const COUCH = { x1: 196, x2: 600, top: 352 };
-const WRIST = { x: 458, y: 338 }; // точка прощупывания пульса (лучевая артерия)
+const WRIST = { x: 458, y: 334 }; // точка прощупывания пульса (лучевая артерия)
 const COUNT_TIME = 15; // с — стандартный подсчёт пульса
 
 export function pulseScene(container, params, set, { heartRate, zone }) {
-  let heartBody, heartGlow, sweepPath, hrScreenText, zoneText, standbyText, beltStripes, consoleEl, secondHand, sector, fingers, ring, beatsOut, hrOut;
+  let heartBody, heartGlow, sweepPath, hrScreenText, zoneText, standbyText, beltStripes, consoleEl, secondHand, sector, fingers, target, ring, beatsOut, hrOut;
   let shownHr = heartRate(params);
   let beatPhase = 0;
   let sweep = 0;
@@ -30,6 +31,7 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
   let result = params.measured ? Math.round(heartRate(params)) : null;
   let ringT = 1;
   let press = 0;
+  let handK = 0; // рука считающего: 0 — убрана, 1 — пальцы на запястье
 
   const scene = createScene(container, {
     build(svg, d) {
@@ -84,18 +86,37 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
       );
       const { x: hx, y: hy, k } = HEART;
       heartGlow = s('ellipse', { cx: hx, cy: hy, rx: 110 * k, ry: 110 * k, fill: d.rad([[0, '#f43f5e', 0.22], [1, '#f43f5e', 0]], 0.5, 0.5) });
-      // Анатомическая форма: асимметричная, верхушкой влево-вниз, с крупными сосудами (не «сердечко»)
+      // Анатомическая форма (вид спереди): асимметричные желудочки верхушкой влево-вниз,
+      // ушко предсердия, дуга аорты, лёгочный ствол и верхняя полая вена — не «сердечко»
       const P = (dx, dy) => `${hx + dx * k} ${hy + dy * k}`;
+      // Сосуд: тёмная оболочка, основной цвет и блик — выглядит как трубка, а не как линия
+      const vessel = (path, color, w) => [
+        s('path', { d: path, fill: 'none', stroke: shade(color, -0.35), 'stroke-width': (w + 3) * k, 'stroke-linecap': 'round' }),
+        s('path', { d: path, fill: 'none', stroke: color, 'stroke-width': w * k, 'stroke-linecap': 'round' }),
+        s('path', { d: path, fill: 'none', stroke: '#ffffff', 'stroke-opacity': 0.35, 'stroke-width': w * 0.25 * k, 'stroke-linecap': 'round', transform: `translate(${-w * 0.2 * k} 0)` }),
+      ];
       heartBody = s('path', {
-        d: `M${P(-42, -66)} C ${P(-96, -34)}, ${P(-78, 58)}, ${P(-8, 92)} C ${P(46, 56)}, ${P(60, -24)}, ${P(38, -70)} C ${P(16, -96)}, ${P(-18, -94)}, ${P(-42, -66)} Z`,
+        d: `M${P(-40, -52)} C ${P(-92, -30)}, ${P(-80, 52)}, ${P(-6, 96)} C ${P(42, 62)}, ${P(72, 4)}, ${P(52, -42)} C ${P(38, -72)}, ${P(-8, -74)}, ${P(-40, -52)} Z`,
         fill: d.rad([[0, shade('#e11d48', 0.35)], [0.6, '#be123c'], [1, shade('#be123c', -0.4)]], 0.35, 0.3), stroke: '#7f1d1d', 'stroke-width': 1.5,
       });
       const heartGroup = s('g', {}, [
+        // верхняя полая вена и дуга аорты с ветвями — позади желудочков
+        ...vessel(`M${P(-44, -44)} V ${hy - 116 * k}`, '#3b82f6', 16),
+        ...vessel(`M${P(-2, -30)} C ${P(-4, -92)}, ${P(8, -118)}, ${P(32, -118)} C ${P(54, -118)}, ${P(62, -100)}, ${P(60, -70)}`, '#e11d48', 20),
+        ...[-4, 18, 38].map((dx) => vessel(`M${P(dx + 6, -112)} L ${P(dx + 2, -134)}`, '#e11d48', 8)).flat(),
         heartBody,
-        s('path', { d: `M${P(-6, -88)} C ${P(10, -118)}, ${P(46, -118)}, ${P(44, -84)}`, fill: 'none', stroke: '#cbd5e1', 'stroke-width': 13 * k, 'stroke-linecap': 'round' }),
-        s('path', { d: `M${P(20, -92)} V ${hy - 128 * k}`, fill: 'none', stroke: '#7dd3fc', 'stroke-width': 11 * k, 'stroke-linecap': 'round' }),
-        s('path', { d: `M${P(-30, -80)} V ${hy - 118 * k}`, fill: 'none', stroke: '#60a5fa', 'stroke-width': 10 * k, 'stroke-linecap': 'round' }),
-        s('path', { d: `M${P(-20, -40)} Q ${P(0, 0)} ${P(-10, 50)}`, fill: 'none', stroke: '#7f1d1d', 'stroke-width': 2, 'stroke-opacity': 0.55 }),
+        // правые отделы спереди чуть темнее: видно, что желудочков два
+        s('path', { d: `M${P(-40, -52)} C ${P(-76, -30)}, ${P(-70, 34)}, ${P(-22, 80)} C ${P(-14, 40)}, ${P(-10, -8)}, ${P(-2, -50)} Z`, fill: '#881337', 'fill-opacity': 0.28 }),
+        // ушко левого предсердия
+        s('path', { d: `M${P(40, -50)} C ${P(62, -66)}, ${P(76, -46)}, ${P(58, -30)} C ${P(52, -36)}, ${P(46, -42)}, ${P(40, -50)} Z`, fill: shade('#be123c', -0.1), stroke: '#7f1d1d', 'stroke-width': 1.2 }),
+        // межжелудочковая борозда с венечной артерией
+        s('path', { d: `M${P(-2, -50)} C ${P(-10, -8)}, ${P(-14, 40)}, ${P(-22, 80)}`, fill: 'none', stroke: '#7f1d1d', 'stroke-width': 3, 'stroke-opacity': 0.55, 'stroke-linecap': 'round' }),
+        s('path', { d: `M${P(-2, -50)} C ${P(-10, -8)}, ${P(-14, 40)}, ${P(-22, 80)}`, fill: 'none', stroke: '#fda4af', 'stroke-width': 1.2, 'stroke-opacity': 0.8 }),
+        // лёгочный ствол — спереди, делится на две лёгочные артерии
+        ...vessel(`M${P(-18, -46)} C ${P(-22, -80)}, ${P(-10, -96)}, ${P(8, -100)}`, '#60a5fa', 16),
+        ...vessel(`M${P(-18, -86)} L ${P(-38, -100)}`, '#60a5fa', 10),
+        // блик на желудочках
+        s('path', { d: `M${P(24, -40)} C ${P(44, -30)}, ${P(50, -4)}, ${P(42, 20)}`, fill: 'none', stroke: '#ffffff', 'stroke-opacity': 0.35, 'stroke-width': 5 * k, 'stroke-linecap': 'round' }),
       ]);
       heartGroup.dataset.cx = hx;
       heartGroup.dataset.cy = hy;
@@ -124,12 +145,12 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
       sweepPath = s('path', { fill: 'none', stroke: '#4ade80', 'stroke-width': 2 });
       hrScreenText = text(sx + sw - 10, sy + 24, '', { size: 22, weight: 700, fill: '#4ade80', anchor: 'end' });
       zoneText = text(sx + 10, sy + 24, '', { size: 13, weight: 600, fill: '#86efac', anchor: 'start' });
-      standbyText = text(sx + 10, sy + 24, 'ожидание', { size: 13, weight: 600, fill: '#64748b', anchor: 'start' });
-      svg.append(sweepPath, hrScreenText, zoneText, standbyText, text(sx + sw / 2, sy + sh + 15, 'ЧСС, уд/мин', { size: 11, fill: '#cbd5e1' }));
+      standbyText = text(sx + 10, sy + 24, tr('ожидание'), { size: 13, weight: 600, fill: '#64748b', anchor: 'start' });
+      svg.append(sweepPath, hrScreenText, zoneText, standbyText, text(sx + sw / 2, sy + sh + 15, tr('ЧСС, уд/мин'), { size: 11, fill: '#cbd5e1' }));
 
       // ---- Табло ручного подсчёта на стене над кушеткой ----
-      beatsOut = readout(d, { x: 236, y: 222, w: 124, caption: 'Удары за 15 с', color: '#fda4af' });
-      hrOut = readout(d, { x: 370, y: 222, w: 124, caption: 'ЧСС = удары × 4', color: '#fda4af' });
+      beatsOut = readout(d, { x: 236, y: 222, w: 124, caption: tr('Удары за 15 с'), color: '#fda4af' });
+      hrOut = readout(d, { x: 370, y: 222, w: 124, caption: tr('ЧСС = удары × 4'), color: '#fda4af' });
       svg.append(beatsOut.g, hrOut.g);
 
       // ---- Кушетка ----
@@ -146,31 +167,69 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
         s('rect', { x: x1 + 90, y: top - 3, width: x2 - x1 - 110, height: 6, rx: 3, fill: '#f1f5f9', 'fill-opacity': 0.9 }), // одноразовая простыня
       );
 
-      // ---- Рука на кушетке, ладонью вверх; вторая рука прощупывает пульс на запястье ----
-      const skin = d.lin([[0, '#f1c7a6'], [0.5, '#e7b48f'], [1, '#c98f6a']], 'v');
-      const skinDark = '#b97c58';
+      // ---- Рука пациента на кушетке, ладонью вверх (вид сбоку) ----
+      // Предплечье лежит на простыне, кисть расслаблена: пальцы чуть согнуты, большой палец
+      // приподнят над ладонью. Выше локтя рука уходит под сложенное одеяло — пациента
+      // целиком не рисуем, чтобы не загромождать кабинет.
+      const bed = top - 3; // верх простыни
+      const skin = d.lin([[0, '#f8d9c2'], [0.45, '#efbf9d'], [1, '#d39673']], 'v');
+      const skinLine = '#b9805d';
+      const skinStroke = { stroke: skinLine, 'stroke-width': 1, 'stroke-linejoin': 'round' };
+      const W0 = WRIST.x;
       const arm = s('g', { style: 'cursor: pointer' }, [
-        s('rect', { x: 300, y: 296, width: 250, height: 60, fill: '#000', 'fill-opacity': 0 }), // зона щелчка
-        // рукав и предплечье
-        s('path', { d: `M300 ${top - 2} L304 ${top - 26} L336 ${top - 30} L340 ${top - 1} Z`, fill: d.lin([[0, '#93a8c4'], [1, '#64789a']], 'v') }),
-        s('path', { d: `M338 ${top - 28} C 380 ${top - 30}, 430 ${top - 24}, 470 ${top - 20} L 472 ${top - 2} C 430 ${top - 1}, 380 ${top}, 338 ${top - 1} Z`, fill: skin, stroke: skinDark, 'stroke-width': 1 }),
-        // кисть ладонью вверх, пальцы слегка согнуты
-        s('path', { d: `M468 ${top - 21} C 488 ${top - 24}, 506 ${top - 20}, 520 ${top - 14} C 530 ${top - 10}, 530 ${top - 3}, 520 ${top - 2} L 470 ${top - 1} Z`, fill: skin, stroke: skinDark, 'stroke-width': 1 }),
-        s('path', { d: `M500 ${top - 20} Q 512 ${top - 30} 522 ${top - 22}`, fill: 'none', stroke: skinDark, 'stroke-width': 1.2 }),
-        s('path', { d: `M430 ${top - 16} Q 448 ${top - 14} 462 ${top - 16}`, fill: 'none', stroke: '#8fa9c9', 'stroke-width': 1.2, 'stroke-opacity': 0.7 }), // вена
+        s('rect', { x: 250, y: 290, width: 320, height: 66, fill: '#000', 'fill-opacity': 0 }), // зона щелчка
+        // мягкая тень руки на простыне
+        s('ellipse', { cx: W0 - 30, cy: bed + 1, rx: 150, ry: 3.5, fill: '#0f172a', 'fill-opacity': 0.12 }),
+        // закатанный рукав рубашки у локтя
+        s('path', { d: `M330 ${bed - 32} C 336 ${bed - 34}, 344 ${bed - 33}, 350 ${bed - 31} L 352 ${bed} L 330 ${bed} Z`, fill: d.lin([[0, '#b7cdea'], [1, '#86a5cf']], 'v'), stroke: '#6f8fbb', 'stroke-width': 1 }),
+        s('path', { d: `M338 ${bed - 32} L 339 ${bed - 1}`, stroke: '#6f8fbb', 'stroke-opacity': 0.5, 'stroke-width': 1 }),
+        // предплечье: к запястью сужается, нижний край лежит на простыне
+        s('path', { d: `M348 ${bed - 27} C 385 ${bed - 28}, 425 ${bed - 21}, ${W0 + 4} ${bed - 15} L ${W0 + 6} ${bed} L 348 ${bed} Z`, fill: skin, ...skinStroke }),
+        s('path', { d: `M358 ${bed - 24} C 392 ${bed - 25}, 420 ${bed - 20}, ${W0 - 8} ${bed - 15}`, fill: 'none', stroke: '#ffffff', 'stroke-opacity': 0.45, 'stroke-width': 2, 'stroke-linecap': 'round' }),
+        // кисть: ладонь с возвышением у основания большого пальца, согнутые пальцы
+        s('path', {
+          d: `M${W0} ${bed - 15} C ${W0 + 12} ${bed - 21}, ${W0 + 30} ${bed - 22}, ${W0 + 44} ${bed - 18} C ${W0 + 56} ${bed - 17}, ${W0 + 66} ${bed - 20}, ${W0 + 73} ${bed - 25} C ${W0 + 78} ${bed - 29}, ${W0 + 86} ${bed - 27}, ${W0 + 85} ${bed - 20} C ${W0 + 84} ${bed - 11}, ${W0 + 71} ${bed - 1}, ${W0 + 50} ${bed} L ${W0 + 2} ${bed} Z`,
+          fill: skin, ...skinStroke,
+        }),
+        // границы согнутых пальцев (вид со стороны мизинца)
+        s('path', { d: `M${W0 + 46} ${bed - 12} C ${W0 + 58} ${bed - 12}, ${W0 + 70} ${bed - 17}, ${W0 + 79} ${bed - 24}`, fill: 'none', stroke: skinLine, 'stroke-opacity': 0.5, 'stroke-width': 1, 'stroke-linecap': 'round' }),
+        // мизинец — ближний к нам, согнут сильнее остальных
+        s('path', { d: `M${W0 + 46} ${bed - 7} C ${W0 + 56} ${bed - 7}, ${W0 + 64} ${bed - 10}, ${W0 + 70} ${bed - 15} C ${W0 + 74} ${bed - 18}, ${W0 + 79} ${bed - 16}, ${W0 + 77} ${bed - 11} C ${W0 + 74} ${bed - 5}, ${W0 + 64} ${bed - 1}, ${W0 + 52} ${bed - 0.5}`, fill: skin, ...skinStroke }),
+        // большой палец приподнят над ладонью
+        s('path', { d: `M${W0 + 10} ${bed - 18} C ${W0 + 17} ${bed - 28}, ${W0 + 30} ${bed - 31}, ${W0 + 39} ${bed - 29} C ${W0 + 45} ${bed - 28}, ${W0 + 45} ${bed - 22}, ${W0 + 39} ${bed - 22} C ${W0 + 32} ${bed - 21}, ${W0 + 25} ${bed - 19}, ${W0 + 20} ${bed - 16} Z`, fill: skin, ...skinStroke }),
+        // складка запястья и голубоватая вена
+        s('path', { d: `M${W0 + 1} ${bed - 13} Q ${W0 - 2} ${bed - 7} ${W0 + 1} ${bed - 2}`, fill: 'none', stroke: skinLine, 'stroke-opacity': 0.6, 'stroke-width': 1 }),
+        s('path', { d: `M${W0 - 60} ${bed - 17} Q ${W0 - 32} ${bed - 14} ${W0 - 8} ${bed - 12}`, fill: 'none', stroke: '#8fa9c9', 'stroke-width': 1.3, 'stroke-opacity': 0.55, 'stroke-linecap': 'round' }),
+        // сложенное одеяло у изголовья: плечо пациента под ним
+        s('path', { d: `M283 ${bed} L 285 ${bed - 34} Q 286 ${bed - 42} 295 ${bed - 42} L 325 ${bed - 41} Q 335 ${bed - 40} 336 ${bed - 30} L 338 ${bed} Z`, fill: d.lin([[0, '#e2e8f0'], [1, '#b8c4d0']], 'v'), stroke: '#94a3b8', 'stroke-width': 1 }),
+        s('path', { d: `M287 ${bed - 28} Q 311 ${bed - 25} 336 ${bed - 27} M288 ${bed - 14} Q 311 ${bed - 11} 337 ${bed - 13}`, fill: 'none', stroke: '#94a3b8', 'stroke-opacity': 0.7, 'stroke-width': 1.2 }),
+        s('path', { d: `M291 ${bed - 38} Q 309 ${bed - 40} 327 ${bed - 38}`, fill: 'none', stroke: '#ffffff', 'stroke-opacity': 0.7, 'stroke-width': 2, 'stroke-linecap': 'round' }),
       ]);
+      // Мишень на запястье, пока пульс не измеряли: подсказывает, куда щёлкнуть
+      target = s('circle', { cx: WRIST.x, cy: WRIST.y, r: 7, fill: '#f43f5e', 'fill-opacity': 0.15, stroke: '#f43f5e', 'stroke-width': 1.5, 'stroke-dasharray': '3 2.5' });
       ring = s('ellipse', { cx: WRIST.x, cy: WRIST.y + 2, rx: 6, ry: 3, fill: 'none', stroke: '#f43f5e', 'stroke-width': 1.5, opacity: 0 });
-      // Два пальца (указательный и средний) второй руки, кисть сверху
-      fingers = s('g', {}, [
-        // рукав, тыльная сторона кисти, затем два пальца: контур — более тёмная линия под телесной
-        s('path', { d: `M${WRIST.x + 58} ${WRIST.y - 70} L${WRIST.x + 84} ${WRIST.y - 108} L${WRIST.x + 110} ${WRIST.y - 90} L${WRIST.x + 80} ${WRIST.y - 54} Z`, fill: d.lin([[0, '#93a8c4'], [1, '#64789a']], 'v') }),
-        s('path', { d: `M${WRIST.x + 14} ${WRIST.y - 30} C ${WRIST.x + 22} ${WRIST.y - 48}, ${WRIST.x + 48} ${WRIST.y - 74}, ${WRIST.x + 66} ${WRIST.y - 72} C ${WRIST.x + 80} ${WRIST.y - 64}, ${WRIST.x + 80} ${WRIST.y - 54}, ${WRIST.x + 74} ${WRIST.y - 48} C ${WRIST.x + 60} ${WRIST.y - 34}, ${WRIST.x + 44} ${WRIST.y - 26}, ${WRIST.x + 30} ${WRIST.y - 22} Z`, fill: skin, stroke: skinDark, 'stroke-width': 1 }),
-        ...[[-2, 0, 18, -32], [9, 1, 32, -28]].flatMap(([x1, y1, x2, y2]) => [
-          s('line', { x1: WRIST.x + x1, y1: WRIST.y + y1, x2: WRIST.x + x2, y2: WRIST.y + y2, stroke: skinDark, 'stroke-width': 10, 'stroke-linecap': 'round' }),
-          s('line', { x1: WRIST.x + x1, y1: WRIST.y + y1, x2: WRIST.x + x2, y2: WRIST.y + y2, stroke: '#ebbb97', 'stroke-width': 8, 'stroke-linecap': 'round' }),
+
+      // Рука того, кто считает пульс: указательный и средний пальцы на лучевой артерии,
+      // безымянный и мизинец поджаты, рукав белого халата. Рисуется в своей системе координат
+      // (кончики пальцев — в начале, кисть вдоль +x) и поворачивается к запястью сверху-справа.
+      const fingerPair = [[-5, -7, 38, -10, shade('#efbf9d', -0.08)], [0, 0, 38, -2, '#f3c7a7']];
+      const fingerHand = s('g', { transform: `translate(${WRIST.x} ${WRIST.y}) rotate(-28)` }, [
+        // рукав халата с манжетой, растворяется к краю
+        s('path', { d: 'M72 -17 C 100 -20, 128 -23, 150 -24 L 150 18 C 128 17, 100 14, 74 12 Z', fill: d.lin([[0, '#ffffff'], [0.65, '#f1f5f9'], [1, '#f1f5f9', 0]]) }),
+        s('path', { d: 'M72 -17 L 74 12', stroke: '#cbd5e1', 'stroke-width': 1.2 }),
+        s('path', { d: 'M82 -18 L 84 13', stroke: '#e2e8f0', 'stroke-width': 1 }),
+        // тыльная сторона кисти и поджатые пальцы
+        s('path', { d: 'M34 -13 C 48 -17, 62 -16, 74 -13 L 74 10 C 62 12, 52 13, 44 15 C 35 17, 28 12, 30 5 C 31 0, 32 -6, 34 -13 Z', fill: skin, ...skinStroke }),
+        s('path', { d: 'M33 3 C 38 6, 44 7, 52 6', fill: 'none', stroke: skinLine, 'stroke-opacity': 0.5, 'stroke-width': 1 }),
+        // вытянутые пальцы: средний (дальний) и указательный, с бликом ногтя
+        ...fingerPair.flatMap(([x1, y1, x2, y2, fill]) => [
+          s('line', { x1, y1, x2, y2, stroke: skinLine, 'stroke-width': 10.5, 'stroke-linecap': 'round' }),
+          s('line', { x1, y1, x2, y2, stroke: fill, 'stroke-width': 8.5, 'stroke-linecap': 'round' }),
+          s('path', { d: `M${x1 + 1} ${y1 - 3} Q ${x1 + 5} ${y1 - 4.5} ${x1 + 9} ${y1 - 3.5}`, fill: 'none', stroke: '#fbe3d3', 'stroke-width': 2.2, 'stroke-linecap': 'round' }),
         ]),
       ]);
-      arm.append(ring, fingers);
+      fingers = s('g', { opacity: 0 }, [fingerHand]);
+      arm.append(target, ring, fingers);
       arm.addEventListener('click', startCount);
       svg.append(arm);
 
@@ -235,7 +294,11 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
       ring.setAttribute('rx', 6 + ringT * 16);
       ring.setAttribute('ry', 3 + ringT * 6);
       ring.setAttribute('opacity', counting ? 0.9 * (1 - ringT) : 0);
-      fingers.setAttribute('transform', `translate(0 ${press * 1.5})`);
+      // Пальцы ложатся на запястье на время подсчёта и убираются после него
+      handK += ((counting ? 1 : 0) - handK) * Math.min(1, dt * 7);
+      fingers.setAttribute('opacity', Math.min(1, handK * 1.6));
+      fingers.setAttribute('transform', `translate(${(1 - handK) * 34} ${(1 - handK) * -18 + press * 1.5})`);
+      target.setAttribute('opacity', !counting && result === null ? 0.55 + 0.45 * Math.sin(now * 4) : 0);
       beatsOut.set(counting || result !== null ? String(beats) : '—');
       hrOut.set(result !== null && !counting ? String(result) : '—');
 

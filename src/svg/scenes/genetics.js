@@ -4,6 +4,7 @@
 // и счётчик семян. Никаких подписей поверх сцены: текст только на доске и табло.
 
 import { createScene, floorShadow, readout, room, s, text } from '../kit.js';
+import { tr } from '../../i18n.js';
 import { sillPlants } from '../bioDecor.js';
 
 const GENOTYPES = ['AA', 'Aa', 'aa'];
@@ -151,9 +152,9 @@ export function geneticsScene(container, params, set, { offspring }) {
       }
 
       // ---------- Счётчик семян на стене под окном ----------
-      cntY = readout(d, { x: 596, y: 276, w: 100, caption: 'Жёлтые', color: '#e8cf6a' });
-      cntG = readout(d, { x: 706, y: 276, w: 100, caption: 'Зелёные', color: '#9cc26a' });
-      cntP = readout(d, { x: 816, y: 276, w: 104, caption: 'Жёлтых, %', color: '#cbd5e1' });
+      cntY = readout(d, { x: 596, y: 276, w: 100, caption: tr('Жёлтые'), color: '#e8cf6a' });
+      cntG = readout(d, { x: 706, y: 276, w: 100, caption: tr('Зелёные'), color: '#9cc26a' });
+      cntP = readout(d, { x: 816, y: 276, w: 104, caption: tr('Жёлтых, %'), color: '#cbd5e1' });
       svg.append(cntY.g, cntG.g, cntP.g);
 
       // ---------- Чашки Петри с семенами родителей ----------

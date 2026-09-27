@@ -5,6 +5,7 @@
 // собранный газ открывается на лучинку, и она ярко вспыхивает — это кислород.
 
 import { beaker, createScene, cylinderShade, draggable, floorShadow, readout, room, s } from '../kit.js';
+import { tr } from '../../i18n.js';
 import { sillPlants } from '../bioDecor.js';
 
 const BENCH = 470;
@@ -153,7 +154,7 @@ export function photosynthesisScene(container, params, set, { bubbleRate }) {
       svg.append(rulerBar, ...rulerTicks);
 
       // Счётчик пузырьков висит на стене
-      counter = readout(d, { x: 330, y: 40, w: 150, caption: 'O₂, пузырьков/мин' });
+      counter = readout(d, { x: 330, y: 40, w: 150, caption: tr('O₂, пузырьков/мин') });
       svg.append(counter.g);
 
       // Стаканчик с лучинкой справа от сосуда

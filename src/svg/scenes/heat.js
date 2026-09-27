@@ -5,12 +5,13 @@
 // на приборной панели, без подписей поверх сцены. Кипение воды — бурное: много пузырей, пар клубами.
 
 import { beaker, bubblePool, createScene, cylinderShade, draggable, floorShadow, hotplate, mixHex, readout, room, s } from '../kit.js';
+import { tr } from '../../i18n.js';
 
 const HOT = { x: 400, y: 372, w: 220 };
 const benchY = 440;
 const START_T = 20;
 const ALU_COLOR = '#cbd5e1';
-const ROD = { min: HOT.x - 44, max: HOT.x + 12, lean: -26 }; // палочка ходит левее термометра и опирается на левый край
+const ROD = { min: HOT.x - 52, max: HOT.x - 14, lean: -26 }; // палочка ходит левее термометра и опирается на левый край
 let filterUid = 0;
 
 export function heatScene(container, params, set, { temperature, substanceOf }) {
@@ -74,14 +75,15 @@ export function heatScene(container, params, set, { temperature, substanceOf }) 
       svg.append(rodGroup);
 
       // Штатив с термометром: стойка, зажим и стеклянная трубка со шкалой
-      const thermoX = HOT.x + 40;
+      // Термометр — по оси стакана: справа от него мерная шкала стакана с цифрами, не заслоняем её
+      const thermoX = HOT.x + 4;
       const standX = HOT.x + 118;
       svg.append(
         floorShadow(standX, benchY + 6, 30, d),
         s('rect', { x: standX - 34, y: benchY - 6, width: 68, height: 10, rx: 3, fill: d.lin([[0, '#475569'], [1, '#1e293b']], 'v') }),
         s('rect', { x: standX - 5, y: 96, width: 10, height: benchY - 96, fill: d.lin(['#94a3b8', '#e2e8f0', '#64748b']) }),
         s('rect', { x: thermoX - 5, y: 108, width: standX - thermoX + 10, height: 10, fill: d.lin([[0, '#94a3b8'], [1, '#64748b']], 'v') }),
-        s('rect', { x: HOT.x + 32, y: 100, width: 16, height: 22, rx: 4, fill: d.lin([[0, '#475569'], [1, '#1e293b']], 'v') }),
+        s('rect', { x: thermoX - 8, y: 100, width: 16, height: 22, rx: 4, fill: d.lin([[0, '#475569'], [1, '#1e293b']], 'v') }),
       );
       svg.append(s('rect', { x: thermoX - 7, y: 118, width: 14, height: 220, rx: 7, fill: '#f1f5f9', 'fill-opacity': 0.6, stroke: '#94a3b8', 'stroke-width': 1.5 }));
       thermoCol = s('rect', { x: thermoX - 3, y: 118, width: 6, height: 0, rx: 3, fill: '#ef4444' });
@@ -92,8 +94,8 @@ export function heatScene(container, params, set, { temperature, substanceOf }) 
       }
 
       // Приборная панель: цифровой термометр и таймер
-      tempRead = readout(d, { x: 730, y: 130, w: 170, caption: 'термометр, °C', color: '#fb7185' });
-      timeRead = readout(d, { x: 730, y: 214, w: 170, caption: 'таймер, с', color: '#67e8f9' });
+      tempRead = readout(d, { x: 730, y: 130, w: 170, caption: tr('термометр, °C'), color: '#fb7185' });
+      timeRead = readout(d, { x: 730, y: 214, w: 170, caption: tr('таймер, с'), color: '#67e8f9' });
       svg.append(tempRead.g, timeRead.g);
     },
 

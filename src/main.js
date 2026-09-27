@@ -1,26 +1,48 @@
 import { SUBSTANCES } from './data/substances.js';
 import { SHELF, SHELF_BY_ID } from './data/shelf.js';
-import { ALL_LESSONS, SIMS, SUBJECTS, SUBJECT_BY_ID, TOPICS } from './data/catalog.js';
+import { ALL_LESSONS, GRADES, SIMS, SIM_GRADE, SUBJECTS, SUBJECT_BY_ID, TOPICS, parseGrade } from './data/catalog.js';
+import { ROADMAP } from './data/roadmap.js';
 import { createChemLab } from './svg/chemLab.js';
 import { createBench } from './bench.js';
 import { loadCompleted, startLesson } from './lesson.js';
 import { createSandbox } from './sandbox.js';
+import { createMissions, mt } from './missions.js';
+import { MISSION_BY_ID } from './data/missions.js';
 import { createSimStage } from './simStage.js';
 import { preview } from './previews.js';
 import { runExperiment } from './engine.js';
-import { lineIcon } from './lineIcons.js';
+import { lineIcon, topicIcon } from './lineIcons.js';
 import * as account from './account.js';
 import { ON_TIME_XP, REPEAT_XP, assignmentStatus, attemptXp, computeProgress, titleOf } from './progress.js';
+import { initChat } from './chat.js';
+import { createLive } from './live.js';
+import { createConstructor } from './constructor.js';
+import { PREVIEW_ID } from './customLesson.js';
+import { applyStaticI18n, lang, locale, plural, setLang, t, tr } from './i18n.js';
+
+// Разметку index.html переводим до первой отрисовки экранов
+applyStaticI18n();
 
 const API_TIMEOUT_MS = 20_000;
 const SUBJECT_KEY = 'ai-stem-lab:subject';
-const SCREENS = ['auth', 'menu', 'teacher', 'workspace'];
+const SCREENS = ['auth', 'menu', 'teacher', 'account', 'workspace', 'constructor'];
 const $ = (id) => document.getElementById(id);
 const el = (tag, className, text) => Object.assign(document.createElement(tag), { className: className ?? '', textContent: text ?? '' });
+
+// Маскот — только декоративный акцент в пустых состояниях: текст рядом и так всё объясняет,
+// поэтому скринридеру картинку не показываем.
+function mascot(pose, size) {
+  const img = el('img', 'mascot');
+  Object.assign(img, { src: `/icons/mascot-${pose}.webp`, alt: '', width: size, height: size, loading: 'lazy', decoding: 'async' });
+  img.setAttribute('aria-hidden', 'true');
+  return img;
+}
 
 let screen = 'auth';
 // Что открыто на рабочем месте: 'lesson' (химия), 'sim-lesson', 'sandbox' (химия), 'sim-free'
 let mode = null;
+// id открытой лабораторной — чтобы ИИ-ассистент в чате знал, о какой работе вопрос
+let currentLessonId = null;
 let lesson = null;
 let user = null; // профиль из Supabase; null — демо-режим без аккаунта
 let subject = loadSubject(); // предмет, выбранный в навигации шапки
@@ -32,22 +54,23 @@ const bench = createBench(lab);
 // Проба газа лучинкой в свободной лаборатории: кнопка — запасной путь к перетаскиванию лучинки на сцене.
 // В лабораторной работе ту же кнопку показывает карточка шага.
 const SPLINT_TEXT = {
-  pop: () => 'Хлопок! Газ сгорает — это водород: 2H₂ + O₂ → 2H₂O.',
-  out: (gas) => `Лучинка погасла: ${gas} не поддерживает горение.`,
-  burn: () => 'Лучинка горит спокойно: в сосуде воздух, газ не выделяется.',
+  pop: () => t('splint.pop'),
+  out: (gas) => t('splint.out', { gas: tr(gas) }),
+  burn: () => t('splint.burn'),
 };
-const splintBtn = el('button', 'ghost', 'Поднести лучинку');
+const splintBtn = el('button', 'ghost', t('splint.button'));
 splintBtn.type = 'button';
 splintBtn.hidden = true;
 $('washBtn').after(splintBtn);
 splintBtn.addEventListener('click', () => {
-  if (bench.isBusy()) return toast('Дождитесь окончания текущего действия.');
+  if (bench.isBusy()) return toast(t('work.busy'));
   lab.splint();
 });
 lab.onSplint(({ gas, outcome }) => {
   if (mode === 'sandbox') toast(SPLINT_TEXT[outcome](gas));
 });
 const sandbox = createSandbox({ bench, lab, $, toast, postJson, explain });
+const missions = createMissions({ bench, lab, $, toast, postJson, saveResult: (id, stats) => saveResult(id, stats), onStart: (id) => openMission(id) });
 const simStage = createSimStage({
   canvasBox: $('simCanvas'),
   controlsBox: $('simControls'),
@@ -55,6 +78,21 @@ const simStage = createSimStage({
   chartBox: $('simChart'),
   clearChartBtn: $('clearChartBtn'),
 });
+const live = createLive({
+  client: account.realtimeClient(),
+  getUser: () => user,
+  toast,
+  coach: $('coach'),
+  openLessonById: (id) => {
+    const i = ALL_LESSONS.findIndex((l) => l.id === id);
+    if (i >= 0) openLesson(i);
+    // Работа учителя из конструктора (id 'c-…'), если она уже загружена с заданиями класса
+    else if (constructorUi.byId(id)) openLesson(constructorUi.byId(id));
+    return i >= 0 || Boolean(constructorUi.byId(id));
+  },
+});
+// Экран «Конструктор лабораторных» (src/constructor.js) создаёт свою разметку сам
+const constructorUi = createConstructor({ show, getUser: () => user, openLesson, toast, confirmAction, mascot });
 
 // ---------- Навигация ----------
 
@@ -63,11 +101,22 @@ function show(next, crumb = '') {
   for (const id of SCREENS) $(id).hidden = id !== next;
   $('workTitle').textContent = crumb;
   $('userBox').hidden = next === 'auth';
+  // Лендинг — продолжение экрана входа, после входа он не нужен
+  $('landing').hidden = next !== 'auth';
   // Режим фокуса: во время опыта убираем навигацию и декоративный фон
   document.body.classList.toggle('focus', next === 'workspace');
   $('topNav').hidden = next === 'auth' || next === 'workspace';
   renderTopNav();
   window.scrollTo(0, 0);
+  // Смена экрана без перезагрузки не слышна скринридеру — переводим фокус на заголовок
+  // новой страницы. В рабочем месте фокус не трогаем: там свой порядок работы с опытом.
+  if (next !== 'workspace') {
+    const h1 = $(next).querySelector('h1');
+    if (h1) {
+      if (!h1.hasAttribute('tabindex')) h1.tabIndex = -1;
+      h1.focus({ preventScroll: true });
+    }
+  }
 }
 
 function showWorkspace(nextMode, crumb) {
@@ -102,20 +151,27 @@ function showWorkspace(nextMode, crumb) {
 
 async function resetBench() {
   lesson?.stop();
+  live.lessonClosed();
   lesson = null;
   mode = null;
   sandbox.leave();
+  missions.leave();
   simStage.unmount();
   simCtrl = null;
+  currentLessonId = null;
   if (bench.state.contents.length) await bench.wash();
   setTemperature(20);
 }
 
-async function openLesson(index) {
+// target — номер работы в ALL_LESSONS или готовая работа учителя из конструктора (custom: true)
+async function openLesson(target, { onExit = openMenu } = {}) {
   await resetBench();
-  const data = ALL_LESSONS[index];
+  const data = typeof target === 'number' ? ALL_LESSONS[target] : target;
   currentSubject = data.subject;
-  const crumb = `${SUBJECT_BY_ID[data.subject].name} · Лабораторная работа № ${data.number}. ${data.title}`;
+  currentLessonId = data.id;
+  const crumb = data.custom
+    ? t('cn.crumb', { subject: tr(SUBJECT_BY_ID[data.subject].name), title: tr(data.title) })
+    : t('work.lessonCrumb', { subject: tr(SUBJECT_BY_ID[data.subject].name), n: data.number, title: tr(data.title) });
   let sim = null;
   if (data.sim) {
     // Сначала показываем стенд: симуляции нужен видимый контейнер, чтобы узнать свой размер.
@@ -138,10 +194,14 @@ async function openLesson(index) {
     setTemperature,
     pick: handlePick,
     explain: data.sim ? () => askSim(data.sim, sim.params, '') : explain,
-    onComplete: saveResult,
-    onExit: openMenu,
-    onNext: nextInSubject(index),
+    quiz: () => lessonQuiz(data.id, data.custom ? data : null),
+    // Проба работы учителем в конструкторе — не результат: в журнал и прогресс не пишем
+    onComplete: data.preview ? null : saveResult,
+    onProgress: (event) => live.progress(data, event),
+    onExit,
+    onNext: typeof target === 'number' ? nextInSubject(target) : null,
   });
+  chat.experimentOpened();
 }
 
 function nextInSubject(index) {
@@ -153,23 +213,35 @@ function nextInSubject(index) {
 async function openSandbox() {
   await resetBench();
   currentSubject = 'chemistry';
-  showWorkspace('sandbox', 'Химия · Свободный эксперимент');
+  showWorkspace('sandbox', `${tr(SUBJECT_BY_ID.chemistry.name)} · ${t('work.free')}`);
   sandbox.enter();
   renderReagentBar(SHELF.map((s) => s.id));
+  chat.experimentOpened();
+}
+
+// Детективная миссия: тот же химический стол, но на полке только реактивы миссии (см. src/missions.js)
+async function openMission(id) {
+  await resetBench();
+  currentSubject = 'chemistry';
+  showWorkspace('mission', `${tr(SUBJECT_BY_ID.chemistry.name)} · ${mt('tile')}`);
+  missions.enter(id);
+  renderReagentBar(MISSION_BY_ID[id].reagents);
+  chat.experimentOpened();
 }
 
 async function openSimFree(simId, { focusAsk = false } = {}) {
   await resetBench();
   const def = SIMS[simId];
   currentSubject = def.subject;
-  showWorkspace('sim-free', `${SUBJECT_BY_ID[def.subject].name} · Свободный эксперимент: ${def.title}`);
-  $('simTheory').textContent = def.theory;
-  $('simFormula').textContent = def.formula;
+  showWorkspace('sim-free', t('work.freeCrumb', { subject: tr(SUBJECT_BY_ID[def.subject].name), title: tr(def.title) }));
+  $('simTheory').textContent = tr(def.theory);
+  $('simFormula').textContent = tr(def.formula);
   simCtrl = simStage.mount(def);
   showSimHint(def);
   $('simAnswer').hidden = true;
   $('simQuestion').value = '';
   if (focusAsk) $('simQuestion').focus();
+  chat.experimentOpened();
 }
 
 async function openMenu() {
@@ -201,7 +273,7 @@ let simCtrl = null; // открытая симуляция (регуляторы
 function renderTopNav() {
   const active = activeSubject();
   $('topNav').replaceChildren(...SUBJECTS.map((s) => {
-    const b = el('button', s.id === active ? 'nav-tab active' : 'nav-tab', s.name);
+    const b = el('button', s.id === active ? 'nav-tab active' : 'nav-tab', tr(s.name));
     b.type = 'button';
     b.style.setProperty('--c', s.color);
     b.style.setProperty('--soft', s.soft);
@@ -236,7 +308,7 @@ async function saveResult(lessonId, stats) {
   const gain = (first ? attemptXp(row) : REPEAT_XP) + (onTime ? ON_TIME_XP : 0);
   if (user) {
     const res = await account.saveResult(lessonId, stats);
-    if (!res.ok) return toast(`Результат не сохранён: ${res.error}`);
+    if (!res.ok) return toast(t('work.saveFail', { error: res.error }));
   } else {
     // Демо-режим: результаты хранятся только в этом браузере
     try {
@@ -249,17 +321,18 @@ async function saveResult(lessonId, stats) {
   }
   const newXp = (lastProgress?.xp ?? 0) + gain;
   const levelUp = lastProgress && newXp >= lastProgress.to;
-  toast(levelUp ? `+${gain} XP · Новый уровень ${lastProgress.level + 1}!` : `+${gain} XP`);
+  const gained = t('work.saved', { points: plural(gain, 'n.point') });
+  toast(levelUp ? t('work.levelUp', { text: gained, level: lastProgress.level + 1 }) : gained);
 }
 
 function setUser(profile) {
   user = profile;
   $('userName').textContent = profile
-    ? `${profile.full_name} · ${profile.role === 'teacher' ? 'учитель' : 'ученик'}, ${profile.grade}`
-    : 'Демо-режим';
+    ? t('user.label', { name: profile.full_name, role: t(profile.role === 'teacher' ? 'role.teacher' : 'role.student'), grade: profile.grade })
+    : t('user.demo');
   $('avatar').textContent = profile
     ? profile.full_name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
-    : 'Д';
+    : t('user.demoInitial');
 }
 
 // ---------- Личный кабинет ----------
@@ -300,45 +373,56 @@ const chemLabPreview = () => preview('chem:lab', (box) => createChemLab(box, {})
 // Общие инструменты предмета — после тем. Свободные опыты физики и биологии берутся из TOPICS.
 const TOOLS = {
   chemistry: [
-    { title: 'Свободная лаборатория', sub: 'Все реактивы и любые условия', icon: 'metals', thumb: chemLabPreview, open: openSandbox },
+    { title: t('tool.freeLab'), sub: t('tool.freeLabSub'), icon: 'metals', thumb: chemLabPreview, open: openSandbox },
+    { title: mt('tile'), sub: mt('tileSub'), icon: 'acids', open: () => missions.showList() },
     {
-      title: 'ИИ-ассистент', sub: 'Спланирует опыт по описанию', icon: 'tools', ai: true,
+      title: t('tool.ai'), sub: t('tool.aiChemSub'), icon: 'tools', ai: true,
       open: async () => { await openSandbox(); $('prompt').focus(); },
     },
   ],
   physics: [
-    { title: 'ИИ-ассистент', sub: 'Ответит на вопросы об опыте', icon: 'tools', ai: true, open: () => openSimFree('ohm', { focusAsk: true }) },
+    { title: t('tool.ai'), sub: t('tool.aiSimSub'), icon: 'tools', ai: true, open: () => openSimFree('ohm', { focusAsk: true }) },
+    // Конструктор — инструмент учителя; гостю он открыт, чтобы его можно было показать без аккаунта
+    { title: t('cn.tool'), sub: t('cn.toolSub'), icon: 'tools', ai: true, teacherTool: true, open: () => constructorUi.open() },
   ],
   biology: [
-    { title: 'ИИ-ассистент', sub: 'Ответит на вопросы об опыте', icon: 'tools', ai: true, open: () => openSimFree('photosynthesis', { focusAsk: true }) },
+    { title: t('tool.ai'), sub: t('tool.aiSimSub'), icon: 'tools', ai: true, open: () => openSimFree('photosynthesis', { focusAsk: true }) },
+    { title: t('cn.tool'), sub: t('cn.toolSub'), icon: 'tools', ai: true, teacherTool: true, open: () => constructorUi.open() },
   ],
 };
 
-// Русские окончания: 1 работа, 2 работы, 5 работ
-function plural(n, one, few, many) {
-  const m10 = n % 10;
-  const m100 = n % 100;
-  const word = m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
-  return `${n} ${word}`;
+// В физике и биологии нет общей песочницы, как в химии, — свободная лаборатория это все симуляции предмета
+// с произвольными параметрами, собранные в одном месте.
+function freeLabTiles(subjectId) {
+  return Object.keys(SIMS).filter((id) => SIMS[id].subject === subjectId).map((simId) => tile({
+    kicker: t('tool.freeLab'), title: tr(SIMS[simId].freeTitle), sub: tr(SIMS[simId].freeSub), thumb: () => simPreview(simId),
+    onClick: () => openSimFree(simId), className: 'free',
+  }));
 }
 
 function greetingWord() {
   const h = new Date().getHours();
-  return h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
+  return t(h < 12 ? 'greet.morning' : h < 18 ? 'greet.day' : 'greet.evening');
 }
 
 // Сводка ученика: результаты с баллами и задания класса (из аккаунта или, в демо-режиме, из браузера)
 async function loadProgress() {
   let results = [];
   let assignments = [];
+  let error = null;
   if (user?.role === 'student') {
     const res = await account.loadMyScores(user.id);
     if (res.ok) results = res.value;
+    else error = res.error;
     if (user.class) {
       const a = await account.loadClassAssignments(user.class.id);
       if (a.ok) assignments = a.value;
+      else error ??= a.error;
+      await constructorUi.loadAssigned(assignments);
     }
   } else if (!user) {
+    // Гость видит работы, собранные в конструкторе в этом браузере, — как ученик видел бы задания
+    await constructorUi.loadOwn();
     try {
       results = JSON.parse(localStorage.getItem(LOCAL_RESULTS_KEY) ?? '[]');
     } catch {
@@ -346,19 +430,19 @@ async function loadProgress() {
     }
     // Работы, пройденные до появления журнала результатов, засчитываем без баллов
     const known = new Set(results.map((r) => r.lesson_id));
-    for (const id of loadCompleted()) if (!known.has(id)) results.push({ lesson_id: id, q_ok: 0, q_total: 0, hyp_ok: 0, hyp_total: 0, completed_at: new Date(0).toISOString() });
+    for (const id of loadCompleted()) if (!known.has(id) && id !== PREVIEW_ID) results.push({ lesson_id: id, q_ok: 0, q_total: 0, hyp_ok: 0, hyp_total: 0, completed_at: new Date(0).toISOString() });
   }
   const progress = computeProgress(results, ALL_LESSONS, assignments);
   lastProgress = progress;
   lastAssignments = assignments;
-  return { progress, assignments, done: progress.done };
+  return { progress, assignments, results, error, done: progress.done };
 }
 
 // Плитка: либо превью сцены сверху (thumb — промис с SVG), либо линейная иконка слева
-function tile({ title, kicker, sub, icon, thumb, badge, onClick, className = '' }) {
-  const t = el('button', `tile ${thumb ? 'has-thumb' : ''} ${className}`);
-  t.type = 'button';
-  t.onclick = onClick;
+function tile({ title, kicker, grade, sub, icon, thumb, badge, onClick, className = '' }) {
+  const btn = el('button', `tile ${thumb ? 'has-thumb' : ''} ${className}`);
+  btn.type = 'button';
+  btn.onclick = onClick;
   let iconBox;
   if (thumb) {
     iconBox = el('span', 'tile-thumb loading');
@@ -368,59 +452,94 @@ function tile({ title, kicker, sub, icon, thumb, badge, onClick, className = '' 
     });
   } else {
     iconBox = el('span', 'tile-line-icon');
-    iconBox.innerHTML = lineIcon(icon);
+    iconBox.innerHTML = topicIcon(icon);
+    if (iconBox.firstElementChild.tagName === 'IMG') iconBox.classList.add('has-img');
   }
   const body = el('span', 'tile-body');
   if (kicker) body.append(el('span', 'tile-kicker', kicker));
+  if (grade) body.append(el('span', 'tile-grade', t('grade.badge', { n: grade })));
   body.append(el('span', 'tile-title', title));
   if (sub) body.append(el('span', 'tile-sub', sub));
-  t.append(iconBox, body);
-  if (badge) t.append(el('span', 'tile-badge done', badge));
-  return t;
+  btn.append(iconBox, body);
+  if (badge) btn.append(el('span', 'tile-badge done', badge));
+  return btn;
 }
 
 async function renderMenu() {
   showOnboarding();
   $('greetWord').textContent = greetingWord();
-  $('greetName').textContent = user ? user.full_name.split(' ')[0] : 'гость';
+  $('greetName').textContent = user ? user.full_name.split(' ')[0] : t('user.guest');
 
-  const { progress, assignments, done } = await loadProgress();
+  const { assignments, done } = await loadProgress();
   // Сначала — невыполненное задание учителя с ближайшим сроком, потом — следующая работа по порядку
   const todo = assignments.filter((a) => !done.has(a.lesson_id))
     .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))[0];
   const assigned = todo ? ALL_LESSONS.findIndex((l) => l.id === todo.lesson_id) : -1;
   const next = assigned >= 0 ? assigned : ALL_LESSONS.findIndex((l) => !done.has(l.id));
   renderBanner(next, assigned >= 0);
-  $('gamePanel').hidden = user?.role === 'teacher';
-  if (user?.role !== 'teacher') renderGame(progress, assignments);
+  // Задание из конструктора: в ALL_LESSONS его нет — баннер ведёт прямо в работу учителя
+  const customTodo = todo && user?.class ? constructorUi.byId(todo.lesson_id) : null;
+  if (customTodo) {
+    $('bannerTitle').textContent = t('banner.assigned');
+    $('bannerSub').textContent = t('cn.bannerSub', { subject: tr(SUBJECT_BY_ID[customTodo.subject].name), title: tr(customTodo.title) });
+    $('bannerBtn').textContent = t('banner.do');
+    $('bannerBtn').onclick = () => openLesson(customTodo);
+  }
+  live.renderMenu($('banner'));
+  gradeFilter = loadGradeFilter();
+  renderSubjects(done);
+}
 
-  // Раздел выбранного в навигации предмета
+// Раздел выбранного в навигации предмета. Отдельно от renderMenu: смена класса в фильтре
+// перерисовывает только его, без повторной загрузки прогресса из сети.
+function renderSubjects(done) {
+  lastDone = done;
   $('subjectSections').replaceChildren(...SUBJECTS.filter((s) => s.id === subject).map((s) => {
     const section = el('section', 'subject-section');
     section.id = `subject-${s.id}`;
     section.style.setProperty('--c', s.color);
     section.style.setProperty('--soft', s.soft);
 
-    const topics = TOPICS[s.id];
-    const lessonCount = ALL_LESSONS.filter((l) => l.subject === s.id).length;
+    // Внутри тем остаются только работы выбранного класса; тема без них скрывается целиком
+    const topics = TOPICS[s.id].map((topic) => ({
+      ...topic,
+      lessons: topic.lessons.filter((id) => matchesGrade(LESSON_BY_ID[id].grade)),
+      sims: (topic.sims ?? []).filter((id) => matchesGrade(SIM_GRADE[id])),
+    })).filter((topic) => topic.lessons.length || topic.sims.length);
+    const lessonCount = topics.reduce((sum, topic) => sum + topic.lessons.length, 0);
     const head = el('div', 'subject-head');
-    head.append(el('span', 'subject-tag', s.name), el('span', 'subject-meta', `${plural(lessonCount, 'работа', 'работы', 'работ')} · ${plural(topics.length, 'тема', 'темы', 'тем')}`));
+    head.append(el('span', 'subject-tag', tr(s.name)));
+    // «0 работ · 0 тем» ничего не объясняет — для пустого класса ниже есть отдельное сообщение
+    if (lessonCount) head.append(el('span', 'subject-meta', t('dash.subjectMeta', { works: plural(lessonCount, 'n.work'), topics: plural(topics.length, 'n.topic') })));
+    const filter = gradeFilterControl(gradeFilter, (g) => {
+      gradeFilter = g;
+      saveGradeFilter(g);
+      // Номер открытой темы относится к прежнему списку тем — после фильтра он указал бы на другую
+      openTopics[s.id] = null;
+      renderSubjects(lastDone);
+      document.querySelector('#subjectSections .grade-chip[aria-pressed="true"]')?.focus();
+    });
 
     // Сначала только список тем; работы темы появляются по нажатию на неё.
     const entries = [
-      ...topics.map((t) => ({
-        name: t.name,
-        icon: t.name,
-        meta: plural(t.lessons.length, 'работа', 'работы', 'работ'),
-        done: t.lessons.filter((id) => done.has(id)).length,
-        total: t.lessons.length,
-        tiles: () => topicTiles(t, done),
+      ...topics.map((topic) => ({
+        name: tr(topic.name),
+        // Иконка темы подбирается по русскому названию из каталога
+        icon: topic.name,
+        meta: plural(topic.lessons.length, 'n.work'),
+        done: topic.lessons.filter((id) => done.has(id)).length,
+        total: topic.lessons.length,
+        tiles: () => topicTiles(topic, done),
       })),
+      ...customEntry(s.id, done),
       {
-        name: 'Инструменты',
+        name: t('dash.tools'),
         icon: 'tools',
-        meta: s.id === 'chemistry' ? 'лаборатория и ИИ' : 'ИИ-ассистент',
-        tiles: () => TOOLS[s.id].map((f) => tile({ title: f.title, sub: f.sub, icon: f.icon, thumb: f.thumb, onClick: f.open, className: f.ai ? 'free ai' : 'free' })),
+        meta: t('dash.toolsMeta'),
+        tiles: () => [
+          ...(s.id === 'chemistry' ? [] : freeLabTiles(s.id)),
+          ...TOOLS[s.id].filter((f) => !f.teacherTool || user?.role !== 'student').map((f) => tile({ title: f.title, sub: f.sub, icon: f.icon, thumb: f.thumb, onClick: f.open, className: f.ai ? 'free ai' : 'free' })),
+        ],
       },
     ];
 
@@ -433,9 +552,10 @@ async function renderMenu() {
       card.setAttribute('aria-expanded', 'false');
       card.setAttribute('aria-controls', detail.id);
       const iconBox = el('span', 'tile-line-icon');
-      iconBox.innerHTML = lineIcon(e.icon);
+      iconBox.innerHTML = topicIcon(e.icon);
+      if (iconBox.firstElementChild.tagName === 'IMG') iconBox.classList.add('has-img');
       const body = el('span', 'tile-body');
-      body.append(el('span', 'tile-title', e.name), el('span', 'tile-sub', e.total ? `${e.meta} · выполнено ${e.done}` : e.meta));
+      body.append(el('span', 'tile-title', e.name), el('span', 'tile-sub', e.total ? t('dash.topicMeta', { meta: e.meta, done: e.done }) : e.meta));
       card.append(iconBox, body, el('span', 'topic-arrow', '›'));
       card.onclick = () => {
         openTopics[s.id] = openTopics[s.id] === k ? null : k;
@@ -452,7 +572,8 @@ async function renderMenu() {
         c.setAttribute('aria-expanded', String(i === k));
       });
       if (k == null) {
-        detail.replaceChildren(el('p', 'topic-empty', 'Выберите тему, чтобы увидеть её лабораторные работы и опыты.'));
+        // Когда у класса есть только «Инструменты», подсказка «выберите тему» лишняя
+        detail.replaceChildren(...(lessonCount ? [el('p', 'topic-empty', t('dash.pickTopic'))] : []));
         return;
       }
       const tiles = el('div', 'tiles');
@@ -461,22 +582,57 @@ async function renderMenu() {
     }
     showTopic();
 
-    section.append(head, grid, detail);
+    section.append(head, filter);
+    if (gradeFilter !== 'all' && !lessonCount) {
+      section.append(el('p', 'grade-empty', t('grade.empty', { subject: tr(s.name), n: gradeFilter })));
+    }
+    section.append(grid, detail);
+    const soon = soonBlock(s.id, lessonCount);
+    if (soon) section.append(soon);
     return section;
   }));
 }
 
-function renderGame(p, assignments) {
+// ---------- Аккаунт ученика ----------
+
+async function openAccount() {
+  if (user?.role === 'teacher') return openTeacher();
+  // Имя — до show(): фокус переходит на заголовок, и скринридер должен сразу его прочитать
+  $('profileName').textContent = user?.full_name ?? t('user.guestName');
+  show('account', t('acc.crumb'));
+  const { progress, assignments, results, error } = await loadProgress();
+  renderAccount(progress, assignments, results);
+  // Иначе сбой сети выглядел бы как потерянный прогресс
+  if (error) accountError(t('acc.loadFail', { error }));
+}
+
+function accountError(msg) {
+  const p = document.querySelector('.account-error');
+  p.hidden = !msg;
+  p.textContent = msg ?? '';
+}
+
+function renderAccount(p, assignments, results) {
+  accountError(null);
+  $('profileAvatar').textContent = $('avatar').textContent;
+  $('profileName').textContent = user?.full_name ?? t('user.guestName');
+  $('profileMeta').textContent = user
+    ? t('acc.meta', { grade: user.grade, cls: user.class ? t('acc.metaClass', { name: user.class.name }) : t('acc.metaNoClass') })
+    : t('acc.demo');
+  $('accJoinForm').hidden = !user || !!user.class;
+  $('leaveClassBtn').hidden = !user?.class;
+  $('profileLogin').hidden = !!user;
+  live.renderAccount(document.querySelector('#account .profile-card'));
+
+  const inLevel = p.xp - p.from;
   $('levelNum').textContent = String(p.level);
   $('levelTitle').textContent = titleOf(p.level);
-  const inLevel = p.xp - p.from;
-  const span = p.to - p.from;
-  $('xpText').textContent = `${p.xp} XP`;
-  $('xpNext').textContent = `до уровня ${p.level + 1}: ${p.to - p.xp} XP`;
-  $('xpBar').style.width = `${Math.round((inLevel / span) * 100)}%`;
-  $('levelRing').style.setProperty('--p', `${Math.round((inLevel / span) * 360)}deg`);
-  $('streak').textContent = p.streak ? `🔥 ${plural(p.streak, 'день', 'дня', 'дней')} подряд` : '🔥 Серия: 0 дней';
-  $('doneCount').textContent = `✓ ${p.done.size} из ${ALL_LESSONS.length} работ`;
+  $('xpText').textContent = plural(p.xp, 'n.point');
+  $('xpBar').style.width = `${Math.round((inLevel / (p.to - p.from)) * 100)}%`;
+  $('xpNext').textContent = t('acc.xpNext', { level: p.level + 1, points: plural(p.to - p.xp, 'n.point') });
+  $('doneCount').textContent = String(p.done.size);
+  $('doneTotal').textContent = t('acc.outOf', { n: ALL_LESSONS.length });
+  $('streak').textContent = String(p.streak);
 
   $('checklist').replaceChildren(...SUBJECTS.map((s) => {
     const { done, total } = p.subjects[s.id];
@@ -487,7 +643,7 @@ function renderGame(p, assignments) {
     fill.style.width = `${(done / total) * 100}%`;
     bar.append(fill);
     const head = el('div', 'subject-progress-head');
-    head.append(el('span', 'subject-dot'), el('span', '', s.name), el('span', 'muted', `${done} / ${total}`));
+    head.append(el('span', 'subject-dot'), el('span', '', tr(s.name)), el('span', 'muted', t('acc.doneOf', { done, total })));
     li.append(head, bar);
     return li;
   }));
@@ -497,51 +653,213 @@ function renderGame(p, assignments) {
   card.hidden = !user?.class;
   if (user?.class) {
     const open = assignments.filter((a) => !p.done.has(a.lesson_id)).length;
-    $('assignCount').textContent = assignments.length ? `осталось ${open}` : '';
+    $('assignCount').textContent = assignments.length ? t('acc.left', { open, total: assignments.length }) : '';
     $('assignmentList').replaceChildren(...(assignments.length ? assignments.map((a) => {
       const i = ALL_LESSONS.findIndex((l) => l.id === a.lesson_id);
-      const l = ALL_LESSONS[i];
+      const l = ALL_LESSONS[i] ?? constructorUi.byId(a.lesson_id);
       if (!l) return el('span');
       const st = assignmentStatus(a, p.done);
       const row = el('button', `assignment ${st.key}`);
       row.type = 'button';
-      row.onclick = () => openLesson(i);
+      row.onclick = () => openLesson(i >= 0 ? i : l);
       const subj = SUBJECT_BY_ID[l.subject];
       const dot = el('span', 'subject-dot');
       dot.style.background = subj.color;
       const text = el('span', 'assignment-text');
-      text.append(el('b', '', l.short ?? l.title), el('span', 'muted small', `${subj.name} · работа № ${l.number}`));
+      text.append(el('b', '', tr(l.short ?? l.title)), el('span', 'muted small', l.custom ? `${tr(subj.name)} · ${t('cn.badge')}` : t('acc.assignmentMeta', { subject: tr(subj.name), n: l.number })));
       row.append(dot, text, el('span', `status ${st.key}`, st.text));
       return row;
-    }) : [el('p', 'muted small', 'Учитель пока не назначил заданий. Можно выполнять любые работы ниже.')]));
+    }) : [el('p', 'muted small', t('acc.noAssignments'))]));
   }
 
-  // Значки
-  $('badgeCount').textContent = `${p.badges.filter((b) => b.got).length} / ${p.badges.length}`;
+  // Достижения
+  $('badgeCount').textContent = t('acc.badgeCount', { got: p.badges.filter((b) => b.got).length, total: p.badges.length });
   $('badgeGrid').replaceChildren(...p.badges.map((b) => {
     const item = el('div', `badge-item ${b.got ? 'got' : 'locked'}`);
-    item.title = b.desc;
-    item.append(el('span', 'badge-icon', b.icon), el('span', 'badge-name', b.name), el('span', 'badge-desc', b.desc));
+    const icon = el('span', 'badge-icon');
+    icon.innerHTML = lineIcon(b.icon);
+    const text = el('span', 'badge-text');
+    text.append(el('b', 'badge-name', b.name), el('span', 'badge-desc', b.desc));
+    // Статус словами, а не только цветом иконки — различимо без цветового зрения и для скринридера
+    const status = b.got ? el('span', 'badge-status got', t('acc.got')) : el('span', 'badge-status muted small', t('acc.notGot'));
+    item.append(icon, text, status);
     return item;
   }));
+
+  // История: последние попытки, новые сверху
+  // Работы, пройденные до появления журнала, подставлены с датой 1970 года — в истории им не место
+  const rows = [...results].filter((r) => new Date(r.completed_at).getTime() > 0).reverse().slice(0, 30);
+  if (!rows.length) {
+    const empty = el('div', 'empty-state');
+    empty.append(mascot('study', 180), el('p', 'muted small', t('acc.emptyHistory')));
+    $('historyTable').replaceChildren(empty);
+    return;
+  }
+  const table = el('table', 'journal-table history-table');
+  const head = table.createTHead().insertRow();
+  for (const key of ['acc.colDate', 'acc.colWork', 'acc.colQuestions', 'acc.colHyp', 'acc.colPoints']) head.append(el('th', '', t(key)));
+  const body = table.createTBody();
+  for (const r of rows) {
+    const l = findLesson(r.lesson_id);
+    const subj = l && SUBJECT_BY_ID[l.subject];
+    const row = body.insertRow();
+    row.insertCell().textContent = new Date(r.completed_at).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+    row.insertCell().textContent = l ? `${subj.short}${lessonNo(l)}. ${tr(l.short ?? l.title)}` : r.lesson_id;
+    const q = row.insertCell();
+    q.textContent = `${r.q_ok}/${r.q_total}`;
+    q.className = r.q_ok === r.q_total ? 'ok' : 'no';
+    row.insertCell().textContent = `${r.hyp_ok}/${r.hyp_total}`;
+    row.insertCell().textContent = String(attemptXp(r));
+  }
+  const wrap = el('div', 'table-wrap');
+  wrap.append(table);
+  $('historyTable').replaceChildren(wrap);
 }
+
+$('accountBtn').addEventListener('click', () => openAccount());
+$('profileLogin').addEventListener('click', () => show('auth'));
+
+$('accJoinForm').addEventListener('submit', withBusy($('accJoinForm'), async (fd) => {
+  const code = String(fd.get('code')).trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) return accountError(t('join.bad'));
+  const res = await account.joinClass(code);
+  if (!res.ok) return accountError(res.error);
+  setUser(res.value);
+  toast(t('join.ok', { name: res.value.class?.name ?? '' }));
+  await openAccount();
+}));
+
+$('leaveClassBtn').addEventListener('click', () => {
+  confirmAction(t('acc.leaveConfirm', { name: user.class?.name ?? '' }), t('acc.leaveYes'), async () => {
+    const res = await account.leaveClass();
+    if (!res.ok) return accountError(res.error);
+    if (res.value) setUser(res.value);
+    await openAccount();
+  });
+});
 
 // Открытая тема в каждом предмете: сохраняется, пока ученик переходит между работами и дашбордом.
 const openTopics = {};
 
-function topicTiles(t, done) {
-  const tiles = t.lessons.map((lessonId) => {
+// ---------- Классы 7–11 ----------
+
+const GRADE_KEY = 'ai-stem-lab:grade-filter';
+const LESSON_BY_ID = Object.fromEntries(ALL_LESSONS.map((l) => [l.id, l]));
+// Сколько работ класса в предмете считаем «мало»: тогда ниже показываем, что готовится по программе
+const FEW_WORKS = 3;
+let gradeFilter = 'all'; // 'all' или номер класса 7–11
+let lastDone = new Set();
+let gradeControlSeq = 0;
+
+const matchesGrade = (grade) => gradeFilter === 'all' || grade === gradeFilter;
+
+// Выбор храним отдельно для каждого, кто входит с этого браузера: за одним школьным компьютером
+// по очереди сидят ученики разных классов, и чужой выбор не должен становиться их фильтром.
+function readGradeStore() {
+  try {
+    const store = JSON.parse(localStorage.getItem(GRADE_KEY) ?? '{}');
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadGradeFilter() {
+  const saved = readGradeStore()[user?.id ?? 'guest'];
+  if (saved === 'all' || GRADES.includes(saved)) return saved;
+  // У учителя в поле класса — название его класса, у гостя класса нет: им по умолчанию «Все»
+  return (user?.role === 'student' && parseGrade(user.grade)) || 'all';
+}
+
+function saveGradeFilter(value) {
+  try {
+    localStorage.setItem(GRADE_KEY, JSON.stringify({ ...readGradeStore(), [user?.id ?? 'guest']: value }));
+  } catch {
+    // Без хранилища выбор действует до перезагрузки страницы.
+  }
+}
+
+// Переключатель «Класс: Все · 7 … 11». Кнопки с aria-pressed, как вкладки предметов в шапке:
+// выбор применяется сразу, без отдельного подтверждения.
+function gradeFilterControl(value, onChange) {
+  const wrap = el('div', 'grade-filter');
+  const label = el('span', 'grade-filter-label', t('grade.label'));
+  label.id = `grade-filter-label-${++gradeControlSeq}`;
+  const group = el('div', 'grade-filter-options');
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-labelledby', label.id);
+  group.append(...['all', ...GRADES].map((g) => {
+    const b = el('button', 'grade-chip', g === 'all' ? t('grade.all') : String(g));
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(g === value));
+    // Одна цифра на кнопке скринридеру ничего не скажет
+    if (g !== 'all') b.setAttribute('aria-label', t('grade.badge', { n: g }));
+    b.onclick = () => onChange(g);
+    return b;
+  }));
+  wrap.append(label, group);
+  return wrap;
+}
+
+// «Скоро»: настоящие разделы программы выбранного класса, для которых работ ещё нет.
+// Это честный план, а не заглушки с выдуманным содержимым, — поэтому плитки не нажимаются.
+function soonBlock(subjectId, lessonCount) {
+  if (gradeFilter === 'all' || lessonCount >= FEW_WORKS) return null;
+  const planned = ROADMAP.filter((r) => r.subject === subjectId && r.grade === gradeFilter);
+  if (!planned.length) return null;
+  const list = el('ul', 'tiles soon-tiles');
+  list.append(...planned.map((r) => {
+    const item = el('li', 'tile soon');
+    item.setAttribute('aria-disabled', 'true');
+    const body = el('span', 'tile-body');
+    const meta = el('span', 'soon-meta');
+    meta.append(el('span', 'tile-grade', t('grade.badge', { n: r.grade })), el('span', 'soon-badge', t('grade.soon')));
+    body.append(meta, el('span', 'tile-title', tr(r.title)));
+    item.append(body);
+    return item;
+  }));
+  const box = el('div', 'soon-block');
+  box.append(el('h3', 'topic-title', t('grade.soonTitle', { n: gradeFilter })), el('p', 'soon-note', t('grade.soonNote')), list);
+  return box;
+}
+
+// Работа по id: встроенная или из конструктора учителя (загруженная с заданиями или своими работами)
+const findLesson = (id) => LESSON_BY_ID[id] ?? constructorUi.byId(id);
+// У работ учителя нет номера в программе — вместо него короткая пометка «ИИ»
+const lessonNo = (l) => l.number ?? t('cn.mark');
+
+// «От учителя»: работы из конструктора — ученику назначенные классу, гостю сохранённые в этом браузере.
+// Отдельной темой рядом с темами предмета, чтобы их не приходилось искать в программе.
+function customEntry(subjectId, done) {
+  const list = constructorUi.forSubject(subjectId, lastAssignments.map((a) => a.lesson_id))
+    .filter((l) => matchesGrade(l.grade));
+  if (!list.length) return [];
+  return [{
+    name: t('cn.fromTeacher'),
+    icon: 'tools',
+    meta: plural(list.length, 'n.work'),
+    done: list.filter((l) => done.has(l.id)).length,
+    total: list.length,
+    tiles: () => list.map((l) => tile({
+      kicker: t('cn.badge'), grade: l.grade, title: l.short ?? l.title, sub: l.topic, thumb: () => lessonPreview(l),
+      badge: done.has(l.id) ? t('dash.done') : '', onClick: () => openLesson(l), className: 'custom',
+    })),
+  }];
+}
+
+function topicTiles(topic, done) {
+  const tiles = topic.lessons.map((lessonId) => {
     const i = ALL_LESSONS.findIndex((l) => l.id === lessonId);
     const l = ALL_LESSONS[i];
     return tile({
-      kicker: `Работа № ${l.number}`, title: l.short ?? l.title, sub: l.topic, thumb: () => lessonPreview(l),
-      badge: done.has(l.id) ? 'Выполнена' : '', onClick: () => openLesson(i),
+      kicker: t('dash.workNo', { n: l.number }), grade: l.grade, title: tr(l.short ?? l.title), sub: tr(l.topic), thumb: () => lessonPreview(l),
+      badge: done.has(l.id) ? t('dash.done') : '', onClick: () => openLesson(i),
     });
   });
-  for (const simId of t.sims ?? []) {
+  for (const simId of topic.sims ?? []) {
     const def = SIMS[simId];
     tiles.push(tile({
-      kicker: 'Свободный опыт', title: def.freeTitle, sub: def.freeSub, thumb: () => simPreview(simId),
+      kicker: t('dash.freeExp'), title: tr(def.freeTitle), sub: tr(def.freeSub), thumb: () => simPreview(simId),
       onClick: () => openSimFree(simId), className: 'free',
     }));
   }
@@ -555,30 +873,30 @@ function renderBanner(next, assigned = false) {
   formError($('banner'), null);
 
   if (!user) {
-    $('bannerTitle').textContent = 'Демо-режим';
-    $('bannerSub').textContent = 'Результаты не сохраняются в журнал класса. Войдите, чтобы вести прогресс.';
-    btn.textContent = 'Войти';
+    $('bannerTitle').textContent = t('banner.demoTitle');
+    $('bannerSub').textContent = t('banner.demoSub');
+    btn.textContent = t('banner.login');
     btn.onclick = () => show('auth');
   } else if (user.role === 'teacher') {
-    $('bannerTitle').textContent = 'Кабинет учителя';
-    $('bannerSub').textContent = 'Создавайте классы, назначайте лабораторные работы и следите за прогрессом учеников.';
-    btn.textContent = 'Мои классы';
+    $('bannerTitle').textContent = t('banner.teacherTitle');
+    $('bannerSub').textContent = t('banner.teacherSub');
+    btn.textContent = t('banner.myClasses');
     btn.onclick = openTeacher;
   } else if (!user.class) {
-    $('bannerTitle').textContent = 'Вступите в класс';
-    $('bannerSub').textContent = 'Введите код от учителя — тогда учитель увидит ваши результаты.';
+    $('bannerTitle').textContent = t('banner.joinTitle');
+    $('bannerSub').textContent = t('banner.joinSub');
     $('joinForm').hidden = false;
     btn.hidden = true;
   } else if (next >= 0) {
     const l = ALL_LESSONS[next];
-    $('bannerTitle').textContent = assigned ? 'Задание от учителя' : next === 0 ? 'Начните практикум' : 'Продолжите практикум';
-    $('bannerSub').textContent = `${assigned ? '' : 'Следующая работа: '}${SUBJECT_BY_ID[l.subject].name}, № ${l.number}. ${l.title}`;
-    btn.textContent = assigned ? 'Выполнить' : next === 0 ? 'Начать' : 'Продолжить';
+    $('bannerTitle').textContent = t(assigned ? 'banner.assigned' : next === 0 ? 'banner.start' : 'banner.continue');
+    $('bannerSub').textContent = t('banner.lesson', { prefix: assigned ? '' : t('banner.nextWork'), subject: tr(SUBJECT_BY_ID[l.subject].name), n: l.number, title: tr(l.title) });
+    btn.textContent = t(assigned ? 'banner.do' : next === 0 ? 'banner.startBtn' : 'banner.continueBtn');
     btn.onclick = () => openLesson(next);
   } else {
-    $('bannerTitle').textContent = 'Все лабораторные работы выполнены';
-    $('bannerSub').textContent = 'Закрепите знания в свободных экспериментах.';
-    btn.textContent = 'Открыть лабораторию';
+    $('bannerTitle').textContent = t('banner.allDone');
+    $('bannerSub').textContent = t('banner.allDoneSub');
+    btn.textContent = t('banner.openLab');
     btn.onclick = openSandbox;
   }
 }
@@ -614,14 +932,14 @@ function switchTab(register) {
 function updateRoleFields() {
   const teacher = $('registerForm').elements.role.value === 'teacher';
   $('codeField').hidden = teacher;
-  $('gradeLabel').textContent = teacher ? 'Класс, в котором вы ведёте предмет' : 'Класс';
+  $('gradeLabel').textContent = t(teacher ? 'auth.gradeTeacher' : 'auth.grade');
 }
 
 $('loginForm').addEventListener('submit', withBusy($('loginForm'), async (fd) => {
   formError($('loginForm'), null);
   const res = await account.login(fd.get('phone'), fd.get('password'));
   if (!res.ok) return formError($('loginForm'), res.error);
-  if (!res.value) return formError($('loginForm'), 'Профиль не найден. Пройдите регистрацию ещё раз с этим же номером и паролем.');
+  if (!res.value) return formError($('loginForm'), t('auth.noProfile'));
   setUser(res.value);
   openMenu();
 }));
@@ -641,17 +959,18 @@ $('joinForm').addEventListener('submit', withBusy($('joinForm'), async (fd) => {
   const box = $('banner');
   formError(box, null);
   const code = String(fd.get('code')).trim().toUpperCase();
-  if (!/^[A-Z0-9]{6}$/.test(code)) return formError(box, 'Код класса — 6 символов (буквы и цифры).');
+  if (!/^[A-Z0-9]{6}$/.test(code)) return formError(box, t('join.bad'));
   const res = await account.joinClass(code);
   if (!res.ok) return formError(box, res.error);
   setUser(res.value);
   renderMenu();
-  toast(`Вы вступили в класс ${res.value.class?.name ?? ''}.`);
+  toast(t('join.ok', { name: res.value.class?.name ?? '' }));
 }));
 
 $('logoutBtn').addEventListener('click', async () => {
   await resetBench();
   await account.logout();
+  constructorUi.reset();
   setUser(null);
   show('auth');
 });
@@ -662,7 +981,9 @@ let teacherClasses = [];
 let activeClassId = null;
 
 async function openTeacher() {
-  show('teacher', 'Мои классы');
+  show('teacher', t('teacher.title'));
+  // Работы из конструктора нужны до таблиц: они бывают среди заданий и в списке для назначения
+  await constructorUi.loadOwn();
   await loadTeacher();
 }
 
@@ -693,7 +1014,7 @@ function renderClassTabs() {
     };
     return b;
   }));
-  if (!teacherClasses.length) $('classTabs').replaceChildren(el('p', 'muted', 'Классов пока нет — создайте первый класс.'));
+  if (!teacherClasses.length) $('classTabs').replaceChildren(el('p', 'muted', t('teacher.noClasses')));
 }
 
 async function renderClassPanel() {
@@ -701,13 +1022,14 @@ async function renderClassPanel() {
   $('classPanel').hidden = !k;
   if (!k) return;
   $('classCode').textContent = k.code;
-  $('classTable').replaceChildren(el('p', 'muted', 'Загрузка…'));
+  $('classTable').replaceChildren(el('p', 'muted', t('teacher.loading')));
 
   const [res, asg] = await Promise.all([account.loadClassResults(k.id), account.loadClassAssignments(k.id)]);
   if (!res.ok) return teacherError(res.error);
   if (!asg.ok) return teacherError(asg.error);
   const { students, results } = res.value;
   const assignments = asg.value;
+  live.renderTeacherCard($('classPanel'), k, students, assignments);
   const doneBy = (sid, lid) => results.some((r) => r.user_id === sid && r.lesson_id === lid);
 
   // Сводка: доля выполненных назначенных работ по всем ученикам
@@ -717,34 +1039,26 @@ async function renderClassPanel() {
   $('statAssigned').textContent = String(assignments.length);
   $('statCompletion').textContent = cells ? `${Math.round((doneCells / cells) * 100)}%` : '—';
 
-  // Выбор работы для назначения: только ещё не назначенные, по предметам
-  const select = document.querySelector('#assignForm select');
-  select.replaceChildren(new Option('Выберите работу…', ''), ...SUBJECTS.map((s) => {
-    const g = document.createElement('optgroup');
-    g.label = s.name;
-    ALL_LESSONS.filter((l) => l.subject === s.id && !assignments.some((a) => a.lesson_id === l.id))
-      .forEach((l) => g.append(new Option(`№ ${l.number}. ${l.short ?? l.title}`, l.id)));
-    return g;
-  }));
+  renderAssignPicker(k, assignments);
 
   // Таблица заданий
   if (!assignments.length) {
-    $('assignTable').replaceChildren(el('p', 'muted small', 'Заданий пока нет. Выберите работу и срок выше.'));
+    $('assignTable').replaceChildren(el('p', 'muted small', t('teacher.noTasks')));
   } else {
     $('assignTable').replaceChildren(...assignments.map((a) => {
-      const l = ALL_LESSONS.find((x) => x.id === a.lesson_id);
+      const l = findLesson(a.lesson_id);
       const n = students.filter((s) => doneBy(s.id, a.lesson_id)).length;
       const row = el('div', 'assign-row');
       const subj = SUBJECT_BY_ID[l?.subject] ?? SUBJECTS[0];
       const dot = el('span', 'subject-dot');
       dot.style.background = subj.color;
       const info = el('span', 'assignment-text');
-      info.append(el('b', '', l ? `${subj.short}${l.number}. ${l.short ?? l.title}` : a.lesson_id), el('span', 'muted small', a.due_date ? `срок: ${new Date(`${a.due_date}T00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` : 'без срока'));
+      info.append(el('b', '', l ? `${subj.short}${lessonNo(l)}. ${tr(l.short ?? l.title)}` : a.lesson_id), el('span', 'muted small', a.due_date ? t('teacher.due', { date: new Date(`${a.due_date}T00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'long' }) }) : t('teacher.noDue')));
       const bar = el('div', 'progress mini-bar');
       const fill = el('div', 'progress-bar');
       fill.style.width = students.length ? `${(n / students.length) * 100}%` : '0%';
       bar.append(fill);
-      const del = el('button', 'ghost small', 'Снять');
+      const del = el('button', 'ghost small', t('teacher.unassign'));
       del.type = 'button';
       del.onclick = async () => {
         const r = await account.unassign(a.id);
@@ -758,17 +1072,17 @@ async function renderClassPanel() {
 
   // Таблица учеников: назначенные работы (или все, если заданий нет) + итог
   if (!students.length) {
-    $('classTable').replaceChildren(el('p', 'muted', `Учеников пока нет. Сообщите им код класса ${k.code}.`));
+    $('classTable').replaceChildren(el('p', 'muted', t('teacher.noStudents', { code: k.code })));
     return;
   }
-  const columns = assignments.length ? assignments.map((a) => ALL_LESSONS.find((l) => l.id === a.lesson_id)).filter(Boolean) : ALL_LESSONS;
+  const columns = assignments.length ? assignments.map((a) => findLesson(a.lesson_id)).filter(Boolean) : ALL_LESSONS;
   const table = el('table', 'journal-table');
   const head = table.createTHead().insertRow();
-  head.append(el('th', '', 'Ученик'), el('th', '', 'Уровень'));
+  head.append(el('th', '', t('teacher.colStudent')), el('th', '', t('teacher.colLevel')));
   for (const l of columns) {
     const subj = SUBJECT_BY_ID[l.subject];
-    const th = el('th', 'subject-th', `${subj.short}${l.number}`);
-    th.title = `${subj.name}: ${l.title}`;
+    const th = el('th', 'subject-th', `${subj.short}${lessonNo(l)}`);
+    th.title = `${tr(subj.name)}: ${tr(l.title)}`;
     th.style.color = subj.color;
     head.append(th);
   }
@@ -777,27 +1091,27 @@ async function renderClassPanel() {
   for (const s of students) {
     const mine = results.filter((r) => r.user_id === s.id);
     const p = computeProgress(mine, ALL_LESSONS, assignments);
-    const tr = body.insertRow();
-    tr.insertCell().textContent = s.full_name;
-    tr.insertCell().textContent = `${p.level} · ${p.xp} XP`;
+    const row = body.insertRow();
+    row.insertCell().textContent = s.full_name;
+    row.insertCell().textContent = t('teacher.levelCell', { level: p.level, xp: p.xp });
     for (const l of columns) {
       const last = mine.filter((r) => r.lesson_id === l.id).at(-1);
-      const td = tr.insertCell();
+      const td = row.insertCell();
       if (!last) {
         const a = assignments.find((x) => x.lesson_id === l.id);
         const late = a && assignmentStatus(a, new Set()).key === 'late';
-        td.textContent = late ? 'просрочено' : '—';
+        td.textContent = late ? t('teacher.late') : '—';
         td.className = late ? 'no' : 'empty-cell';
         continue;
       }
       td.textContent = `${last.q_ok}/${last.q_total}`;
       td.className = last.q_ok === last.q_total ? 'ok' : 'no';
-      td.title = `Контрольные вопросы ${last.q_ok}/${last.q_total}, гипотезы ${last.hyp_ok}/${last.hyp_total}. Выполнено ${new Date(last.completed_at).toLocaleString('ru-RU')}`;
+      td.title = t('teacher.cellTitle', { q: `${last.q_ok}/${last.q_total}`, h: `${last.hyp_ok}/${last.hyp_total}`, date: new Date(last.completed_at).toLocaleString(locale) });
     }
-    const act = tr.insertCell();
-    const rm = el('button', 'ghost small', 'Убрать');
+    const act = row.insertCell();
+    const rm = el('button', 'ghost small', t('teacher.remove'));
     rm.type = 'button';
-    rm.onclick = () => confirmAction(`Убрать ученика «${s.full_name}» из класса? Его результаты сохранятся.`, 'Убрать', async () => {
+    rm.onclick = () => confirmAction(t('teacher.removeConfirm', { name: s.full_name }), t('teacher.remove'), async () => {
       const r = await account.removeStudent(s.id);
       if (!r.ok) return teacherError(r.error);
       await renderClassPanel();
@@ -807,15 +1121,52 @@ async function renderClassPanel() {
   const wrap = el('div', 'table-wrap');
   wrap.append(table);
   const legend = el('p', 'muted small', assignments.length
-    ? 'Показаны назначенные работы. В ячейке — верные ответы на контрольные вопросы (последняя попытка), зелёным — все верно.'
-    : 'Заданий нет — показаны все работы. Х — химия, Ф — физика, Б — биология.');
+    ? t('teacher.legendAssigned')
+    : t('teacher.legendAll'));
   $('classTable').replaceChildren(wrap, legend);
 }
 
+// Выбор работы для назначения: только ещё не назначенные, по предметам и с фильтром по классу.
+// Фильтр по умолчанию берётся из названия класса («8Б» → 8), чтобы учитель сразу видел работы своей параллели.
+const teacherGrade = {};
+
+function renderAssignPicker(k, assignments) {
+  const grade = teacherGrade[k.id] ?? parseGrade(k.name) ?? 'all';
+  const fits = (l) => (grade === 'all' || l.grade === grade) && !assignments.some((a) => a.lesson_id === l.id);
+  const control = gradeFilterControl(grade, (g) => {
+    teacherGrade[k.id] = g;
+    renderAssignPicker(k, assignments);
+    document.querySelector('#assignGrade .grade-chip[aria-pressed="true"]')?.focus();
+  });
+  control.id = 'assignGrade';
+  const old = $('assignGrade');
+  if (old) old.replaceWith(control);
+  else $('assignForm').before(control);
+
+  const groups = SUBJECTS.map((s) => {
+    const g = document.createElement('optgroup');
+    g.label = tr(s.name);
+    ALL_LESSONS.filter((l) => l.subject === s.id && fits(l))
+      .forEach((l) => g.append(new Option(t(grade === 'all' ? 'teacher.optionGrade' : 'teacher.option', { n: l.number, title: tr(l.short ?? l.title), grade: l.grade }), l.id)));
+    return g;
+  }).filter((g) => g.children.length);
+  // Свои работы из конструктора — отдельной группой, по тому же фильтру класса
+  const custom = constructorUi.ownRows().filter((r) => (grade === 'all' || r.grade === grade) && !assignments.some((a) => a.lesson_id === r.lesson_id));
+  if (custom.length) {
+    const g = document.createElement('optgroup');
+    g.label = t('cn.fromAi');
+    custom.forEach((r) => g.append(new Option(r.title, r.lesson_id)));
+    groups.push(g);
+  }
+  const placeholder = t(groups.length || grade === 'all' ? 'teacher.pickWork' : 'teacher.noWorksForGrade', { n: grade });
+  document.querySelector('#assignForm select').replaceChildren(new Option(placeholder, ''), ...groups);
+}
+
 // Подтверждение опасных действий внутри страницы (без системных диалогов)
-function confirmAction(text, yesLabel, onYes) {
+function confirmAction(text, yesLabel, onYes, danger = true) {
   $('confirmText').textContent = text;
   $('confirmYes').textContent = yesLabel;
+  $('confirmYes').classList.toggle('danger-bg', danger);
   $('confirmBox').hidden = false;
   $('confirmNo').onclick = () => { $('confirmBox').hidden = true; };
   $('confirmYes').onclick = async () => {
@@ -832,7 +1183,7 @@ $('newClassForm').addEventListener('submit', withBusy($('newClassForm'), async (
   activeClassId = r.value?.id ?? activeClassId;
   $('newClassForm').reset();
   await loadTeacher();
-  toast(`Класс «${name}» создан. Код: ${r.value?.code ?? ''}`);
+  toast(t('teacher.created', { name, code: r.value?.code ?? '' }));
 }));
 
 $('assignForm').addEventListener('submit', withBusy($('assignForm'), async (fd) => {
@@ -847,9 +1198,9 @@ $('assignForm').addEventListener('submit', withBusy($('assignForm'), async (fd) 
 $('copyCode').addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText($('classCode').textContent);
-    toast('Код скопирован');
+    toast(t('teacher.copied'));
   } catch {
-    toast(`Код класса: ${$('classCode').textContent}`);
+    toast(t('teacher.codeIs', { code: $('classCode').textContent }));
   }
 });
 
@@ -879,10 +1230,21 @@ $('renameClass').addEventListener('click', () => {
   });
 });
 
+$('newCodeBtn').addEventListener('click', () => {
+  const k = teacherClasses.find((x) => x.id === activeClassId);
+  if (!k) return;
+  confirmAction(t('teacher.newCodeConfirm', { name: k.name }), t('teacher.newCodeYes'), async () => {
+    const r = await account.regenerateCode(k.id);
+    if (!r.ok) return teacherError(r.error);
+    await loadTeacher();
+    toast(t('teacher.newCodeDone', { code: r.value }));
+  }, false);
+});
+
 $('deleteClass').addEventListener('click', () => {
   const k = teacherClasses.find((x) => x.id === activeClassId);
   if (!k) return;
-  confirmAction(`Удалить класс «${k.name}»? Задания класса удалятся, ученики останутся без класса, их результаты сохранятся.`, 'Удалить', async () => {
+  confirmAction(t('teacher.deleteConfirm', { name: k.name }), t('confirm.delete'), async () => {
     const r = await account.deleteClass(k.id);
     if (!r.ok) return teacherError(r.error);
     activeClassId = null;
@@ -893,9 +1255,10 @@ $('deleteClass').addEventListener('click', () => {
 // ---------- Стол ----------
 
 function handlePick(id) {
-  if (bench.isBusy()) return toast('Дождитесь окончания текущего действия.');
+  if (bench.isBusy()) return toast(t('work.busy'));
   if (mode === 'lesson') lesson?.handlePick(id);
   else if (mode === 'sandbox') sandbox.handlePick(id);
+  else if (mode === 'mission') missions.handlePick(id);
 }
 
 function setTemperature(t) {
@@ -905,17 +1268,17 @@ function setTemperature(t) {
 }
 
 // Подсказка под сценой (не поверх картинки): при наведении — название реактива.
-const CHEM_HINT = 'Нажмите на склянку или чашку с веществом — реактив попадёт в сосуд на столе.';
+const CHEM_HINT = t('work.chemHint');
 function showHover(id) {
   const item = id ? SHELF_BY_ID[id] : null;
   $('hint').textContent = item
-    ? `${SUBSTANCES[item.substance].name}${item.concentration ? ' (концентрированная)' : ''}`
+    ? `${tr(SUBSTANCES[item.substance].name)}${item.concentration ? t('work.concentratedHint') : ''}`
     : CHEM_HINT;
 }
 
 function showSimHint(def) {
   $('simHint').hidden = !def.hint;
-  $('simHint').textContent = def.hint ?? '';
+  $('simHint').textContent = tr(def.hint) ?? '';
 }
 
 let toastTimer;
@@ -936,7 +1299,8 @@ async function postJson(path, body) {
     const res = await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      // Язык интерфейса уходит в каждый запрос к ИИ: на нём сервер и ответит
+      body: JSON.stringify({ ...body, lang }),
       signal: ctrl.signal,
     });
     return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) };
@@ -954,19 +1318,26 @@ async function explain(result) {
   return [result.why, result.hint].filter(Boolean).join(' ');
 }
 
+// Опрос на закрепление по итогам работы; null — ИИ недоступен, работа сама соберёт запасной опрос.
+// Работу учителя сервер не хранит — она уходит вместе с id, сервер перепроверит её (server/handlers.js)
+async function lessonQuiz(lessonId, customLesson = null) {
+  const res = await postJson('/api/quiz', { lessonId, ...(customLesson && { lesson: customLesson }) });
+  return res.ok && Array.isArray(res.data.questions) ? res.data.questions : null;
+}
+
 // Вопрос ИИ об опыте на симуляции; если ИИ недоступен — теория из описания симуляции.
 async function askSim(simId, params, question) {
   const res = await postJson('/api/ask', { simId, params, question });
   if (res.ok && typeof res.data.text === 'string') return res.data.text;
   const def = SIMS[simId];
-  return `ИИ-ассистент сейчас недоступен. ${def.describe(params)}. ${def.theory}`;
+  return t('work.aiOffline', { describe: tr(def.describe(params)), theory: tr(def.theory) });
 }
 
 async function answerSim(question) {
   if (!simCtrl) return;
   const box = $('simAnswer');
   box.hidden = false;
-  box.textContent = 'Ассистент думает…';
+  box.textContent = t('work.thinking');
   box.textContent = await askSim(simCtrl.def.id, { ...simCtrl.params }, question);
 }
 
@@ -977,13 +1348,26 @@ $('simAskForm').addEventListener('submit', (e) => {
 });
 $('simExplainBtn').addEventListener('click', () => answerSim(''));
 
+// Плавающему чату отдаём только «что открыто сейчас»: предмет и, если это симуляция, её параметры.
+// Сервер сам пересчитает показания по описанию опыта.
+function chatContext() {
+  if (screen !== 'workspace') return { subject: activeSubject() };
+  const lessonId = currentLessonId ?? undefined;
+  if (simCtrl) return { subject: currentSubject, simId: simCtrl.def.id, params: { ...simCtrl.params }, lessonId };
+  // Миссия: содержимое стола не отправляем — по нему ассистент узнал бы неизвестные вещества
+  if (mode === 'mission') return { subject: 'chemistry', mission: true };
+  // Химия: работа или свободная лаборатория — ассистенту важно, что уже в стакане и как нагрето
+  return { subject: currentSubject, lessonId, sandbox: mode === 'sandbox', bench: { contents: [...bench.state.contents], temperature: bench.state.temperature } };
+}
+const chat = initChat({ postJson, getContext: chatContext, screens: SCREENS.filter((id) => id !== 'auth') });
+
 // Те же реактивы, что на 3D-столе, но кнопками: для клавиатуры, экранных дикторов и слабых компьютеров.
 function renderReagentBar(ids) {
-  $('reagentBar').replaceChildren(el('span', 'reagent-bar-label', 'Реактивы:'), ...ids.map((id) => {
+  $('reagentBar').replaceChildren(el('span', 'reagent-bar-label', t('work.reagents')), ...ids.map((id) => {
     const item = SHELF_BY_ID[id];
-    const b = el('button', 'reagent', item.kind === 'dish' ? item.label : `${item.label} ${item.note}`);
+    const b = el('button', 'reagent', item.kind === 'dish' ? tr(item.label) : `${tr(item.label)} ${tr(item.note)}`);
     b.type = 'button';
-    b.setAttribute('aria-label', `${SUBSTANCES[item.substance].name}${item.concentration ? ', концентрированная' : ''}`);
+    b.setAttribute('aria-label', `${tr(SUBSTANCES[item.substance].name)}${item.concentration ? t('work.concentratedAria') : ''}`);
     b.onclick = () => handlePick(id);
     return b;
   }));
@@ -1007,13 +1391,19 @@ try {
   setLargeText(false);
 }
 
+// Переключатель языка: смена перезагружает страницу (почему — см. src/i18n.js)
+for (const b of document.querySelectorAll('.lang-switch [data-lang]')) {
+  b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
+  b.addEventListener('click', () => setLang(b.dataset.lang));
+}
+
 // Клавиатура в лабораторной работе: Enter — «Далее» или действие шага, 1–4 — вариант ответа
 document.addEventListener('keydown', (e) => {
   if (screen !== 'workspace' || !$('lessonSide') || $('lessonSide').hidden) return;
   if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]')) return;
   const buttons = [...$('coach').querySelectorAll('button:not([disabled])')];
   if (e.key === 'Enter') {
-    const next = buttons.find((b) => b.textContent === 'Далее') ?? buttons.find((b) => b.classList.contains('primary'));
+    const next = buttons.find((b) => b.textContent === t('lesson.next')) ?? buttons.find((b) => b.classList.contains('primary'));
     if (next) {
       e.preventDefault();
       next.click();
@@ -1029,6 +1419,54 @@ $('guestBtn').addEventListener('click', () => {
   setUser(null);
   openMenu();
 });
+
+// ---------- Лендинг под экраном входа ----------
+
+// Число работ, классы и темы берём из каталога, чтобы лендинг не расходился с программой при добавлении работ
+// «7–9»: диапазон классов, в которых уже есть работы (классы подряд, пропусков в программе нет)
+function gradeRange(grades) {
+  const list = [...new Set(grades)].filter(Boolean).sort((a, b) => a - b);
+  if (!list.length) return '';
+  return list[0] === list.at(-1) ? String(list[0]) : `${list[0]}–${list.at(-1)}`;
+}
+{
+  const covered = ALL_LESSONS.map((l) => l.grade);
+  const soon = gradeRange(GRADES.filter((g) => !covered.includes(g)));
+  $('landWorksNum').textContent = String(ALL_LESSONS.length);
+  $('landWorksTitle').textContent = t(soon ? 'land.f2Soon' : 'land.f2Title', { range: gradeRange(covered), soon });
+}
+for (const card of document.querySelectorAll('.land-subject')) {
+  const id = card.dataset.subject;
+  const topics = TOPICS[id] ?? [];
+  const works = topics.reduce((sum, topic) => sum + topic.lessons.length, 0);
+  const range = gradeRange(ALL_LESSONS.filter((l) => l.subject === id).map((l) => l.grade));
+  card.style.setProperty('--c', SUBJECT_BY_ID[id].color);
+  card.querySelector('.land-subject-name').textContent = tr(SUBJECT_BY_ID[id].name);
+  card.querySelector('.land-subject-count').textContent = range ? t('land.subjectCount', { works: plural(works, 'n.work'), range }) : plural(works, 'n.work');
+  card.querySelector('.land-subject-topics').textContent = topics.slice(0, 3).map((topic) => tr(topic.name)).join(' · ');
+}
+// Та же гостевая кнопка, что и в карточке входа: логика гостевого режима живёт в одном месте
+$('landGuestBtn').addEventListener('click', () => $('guestBtn').click());
+$('landLoginBtn').addEventListener('click', () => {
+  switchTab(false);
+  const phone = $('loginForm').elements.phone;
+  const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  phone.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
+  phone.focus({ preventScroll: true });
+});
+// Плавное появление при прокрутке. Класс reveal-on ставится только из JS и только без
+// «уменьшения движения»: без скрипта или с этой настройкой блоки видны сразу.
+if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const reveal = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add('in');
+      reveal.unobserve(entry.target);
+    }
+  }, { rootMargin: '0px 0px -8% 0px' });
+  $('landing').classList.add('reveal-on');
+  for (const node of $('landing').querySelectorAll('.reveal')) reveal.observe(node);
+}
 
 // Короткая подсказка для первого визита; после «Понятно» больше не показывается
 const ONBOARDING_KEY = 'ai-stem-lab:onboarding-done';
@@ -1067,7 +1505,7 @@ async function boot() {
     // Без Supabase приложение остаётся рабочим для демонстрации, но без аккаунтов.
     const notice = $('authNotice');
     notice.hidden = false;
-    notice.textContent = 'Вход пока не настроен — можно попробовать практикум без регистрации.';
+    notice.textContent = t('auth.notConfigured');
     show('auth');
     return;
   }
@@ -1086,5 +1524,5 @@ boot();
 
 // Только в режиме разработки: позволяет автотестам работать без мыши.
 if (import.meta.env.DEV) {
-  window.__lab = { pick: handlePick, busy: () => bench.isBusy(), openLesson, openSandbox, openSimFree, setTemperature };
+  window.__lab = { constructor: constructorUi, sim: () => simCtrl, pick: handlePick, busy: () => bench.isBusy(), openLesson, openSandbox, openSimFree, setTemperature, openMission, missionState: () => missions.debug(), missionList: () => missions.showList() };
 }

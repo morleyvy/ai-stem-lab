@@ -37,6 +37,10 @@ export function text(x, y, value, { size = 16, weight = 500, fill = PALETTE.labe
 let uid = 0;
 const id = (p) => `${p}${++uid}`;
 
+// Пользователь просит меньше движения: декоративные колыхания (пламя, марево, дрожание)
+// гасим до еле заметных, а сами опыты — пузыри, стрелки, уровни — идут как обычно.
+export const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 // ---------- Сцена ----------
 
 // Создаёт SVG-сцену в контейнере и цикл анимации. build(svg, defs) рисует оборудование,
@@ -51,6 +55,12 @@ export function createScene(container, { build, frame }) {
 
   let raf = 0;
   let last = performance.now();
+  // Первый кадр — сразу, не дожидаясь requestAnimationFrame: без него подвижные части стоят
+  // в (0, 0), и превью-снимок сцены (фоновая вкладка, медленная машина) выходит сломанным.
+  // Микрозадача, а не прямой вызов: frame() может ссылаться на то, что сцена объявляет
+  // уже после createScene().
+  let alive = true;
+  queueMicrotask(() => { if (alive) frame?.(0, last / 1000); });
   const loop = (now) => {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
@@ -69,6 +79,7 @@ export function createScene(container, { build, frame }) {
       return p.matrixTransform(svg.getScreenCTM().inverse());
     },
     destroy() {
+      alive = false;
       cancelAnimationFrame(raf);
       svg.remove();
     },
@@ -77,21 +88,29 @@ export function createScene(container, { build, frame }) {
 
 // Общие градиенты и фильтры: стекло, металл, мягкая тень, свечение
 function sharedDefs(defs) {
-  const ids = { glass: id('glass'), metal: id('metal'), shadow: id('shadow'), glow: id('glow'), soft: id('soft'), wall: id('wall') };
+  const ids = { glass: id('glass'), metal: id('metal'), shadow: id('shadow'), glow: id('glow'), soft: id('soft'), wall: id('wall'), vignette: id('vignette') };
   defs.append(
+    // Стекло: свет падает слева-сверху — яркая кромка слева, узкий контровой блик справа,
+    // середина почти прозрачная (толщина стенки видна только по краям, как у настоящей посуды)
     s('linearGradient', { id: ids.glass, x1: 0, x2: 1 }, [
-      s('stop', { offset: 0, 'stop-color': '#ffffff', 'stop-opacity': 0.55 }),
-      s('stop', { offset: 0.18, 'stop-color': '#ffffff', 'stop-opacity': 0.08 }),
-      s('stop', { offset: 0.82, 'stop-color': '#ffffff', 'stop-opacity': 0.05 }),
-      s('stop', { offset: 1, 'stop-color': '#ffffff', 'stop-opacity': 0.35 }),
+      s('stop', { offset: 0, 'stop-color': '#ffffff', 'stop-opacity': 0.7 }),
+      s('stop', { offset: 0.06, 'stop-color': '#ffffff', 'stop-opacity': 0.28 }),
+      s('stop', { offset: 0.2, 'stop-color': '#ffffff', 'stop-opacity': 0.06 }),
+      s('stop', { offset: 0.78, 'stop-color': '#e2e8f0', 'stop-opacity': 0.04 }),
+      s('stop', { offset: 0.9, 'stop-color': '#94a3b8', 'stop-opacity': 0.14 }),
+      s('stop', { offset: 0.96, 'stop-color': '#ffffff', 'stop-opacity': 0.55 }),
+      s('stop', { offset: 1, 'stop-color': '#cbd5e1', 'stop-opacity': 0.4 }),
     ]),
     s('linearGradient', { id: ids.metal, x1: 0, x2: 1 }, [
       s('stop', { offset: 0, 'stop-color': '#64748b' }),
       s('stop', { offset: 0.35, 'stop-color': '#e2e8f0' }),
       s('stop', { offset: 1, 'stop-color': '#64748b' }),
     ]),
+    // Тень предмета на столе: плотное ядро у точки касания и мягкий широкий ореол
     s('radialGradient', { id: ids.shadow }, [
-      s('stop', { offset: 0, 'stop-color': '#000000', 'stop-opacity': 0.45 }),
+      s('stop', { offset: 0, 'stop-color': '#0f172a', 'stop-opacity': 0.42 }),
+      s('stop', { offset: 0.35, 'stop-color': '#0f172a', 'stop-opacity': 0.24 }),
+      s('stop', { offset: 0.7, 'stop-color': '#0f172a', 'stop-opacity': 0.07 }),
       s('stop', { offset: 1, 'stop-color': '#0f172a', 'stop-opacity': 0 }),
     ]),
     s('radialGradient', { id: ids.glow }, [
@@ -101,6 +120,11 @@ function sharedDefs(defs) {
     s('linearGradient', { id: ids.wall, x1: 0, y1: 0, x2: 0, y2: 1 }, [
       s('stop', { offset: 0, 'stop-color': '#ffffff' }),
       s('stop', { offset: 1, 'stop-color': '#eef2f8' }),
+    ]),
+    // Виньетка комнаты: края кадра чуть темнее — взгляд собирается к установке в центре
+    s('radialGradient', { id: ids.vignette, cx: 0.5, cy: 0.42, r: 0.75 }, [
+      s('stop', { offset: 0.55, 'stop-color': '#0f172a', 'stop-opacity': 0 }),
+      s('stop', { offset: 1, 'stop-color': '#0f172a', 'stop-opacity': 0.14 }),
     ]),
     s('filter', { id: ids.soft, x: '-20%', y: '-20%', width: '140%', height: '140%' }, [
       s('feDropShadow', { dx: 0, dy: 6, stdDeviation: 6, 'flood-color': '#0f172a', 'flood-opacity': 0.12 }),

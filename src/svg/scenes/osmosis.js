@@ -6,6 +6,7 @@
 // изображение в окуляре размыто (feGaussianBlur).
 
 import { createScene, cylinderShade, floorShadow, readout, room, s } from '../kit.js';
+import { tr } from '../../i18n.js';
 import { sillPlants } from '../bioDecor.js';
 
 const BENCH = 470;
@@ -147,7 +148,7 @@ export function osmosisScene(container, params, set, { massChange }) {
 
       // Табло на стене под окном: концентрация раствора и изменение массы ткани
       conc = readout(d, { x: 810, y: 284, w: 115, caption: 'NaCl, %', color: '#67e8f9' });
-      mass = readout(d, { x: 810, y: 370, w: 115, caption: 'Δm ткани, %' });
+      mass = readout(d, { x: 810, y: 370, w: 115, caption: tr('Δm ткани, %') });
       svg.append(conc.g, mass.g);
 
       // Винт фокусировки (поверх штатива): накатка-риска показывает поворот

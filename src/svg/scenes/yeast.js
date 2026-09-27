@@ -28,8 +28,19 @@ function flaskPath({ x, bottom, bodyW, bodyH, neckW, neckTop }) {
     Z`;
 }
 
+// Надутый шарик: круглое тело сужается к горлышку, надетому на колбу (y0 — низ горлышка)
+function balloonPath(x, y0, r) {
+  const cy = y0 - 8 - r * 0.95;
+  const rx = r * 0.86;
+  return `M${x - 5} ${y0}
+    C${x - 6} ${y0 - 6}, ${x - rx} ${cy + r * 0.8}, ${x - rx} ${cy}
+    C${x - rx} ${cy - r * 0.62}, ${x - r * 0.48} ${cy - r}, ${x} ${cy - r}
+    C${x + r * 0.48} ${cy - r}, ${x + rx} ${cy - r * 0.62}, ${x + rx} ${cy}
+    C${x + rx} ${cy + r * 0.8}, ${x + 6} ${y0 - 6}, ${x + 5} ${y0} Z`;
+}
+
 export function yeastScene(container, params, set, { co2Volume, yeastActivity }) {
-  let balloon, collar, loose, bubbles, co2Readout, heater, liquid;
+  let balloon, balloonBody, balloonShine, collar, loose, bubbles, co2Readout, heater, liquid;
   let shownV = co2Volume(params);
   let attached = params.balloon === 1;
   let looseState = attached ? 'gone' : 'rest'; // rest | drag | fly (кнопка шага надевает сама) | gone
@@ -74,7 +85,9 @@ export function yeastScene(container, params, set, { co2Volume, yeastActivity })
 
       // Шарик на горлышке колбы, надувается от выделяющегося CO₂
       const rubber = d.rad([[0, '#fca5a5'], [0.6, '#f43f5e'], [1, '#9f1239']], 0.35, 0.3);
-      balloon = s('ellipse', { cx: FLASK_X, cy: FLASK.neckTop - 20, rx: 12, ry: 14, fill: rubber });
+      balloonBody = s('path', { fill: rubber, stroke: '#9f1239', 'stroke-width': 1 });
+      balloonShine = s('ellipse', { fill: '#ffffff', 'fill-opacity': 0.45 });
+      balloon = s('g', {}, [balloonBody, balloonShine]);
       collar = s('rect', { x: FLASK_X - 16, y: FLASK.neckTop - 8, width: 32, height: 10, rx: 2, fill: '#be123c' });
       svg.append(collar, balloon);
 
@@ -117,9 +130,13 @@ export function yeastScene(container, params, set, { co2Volume, yeastActivity })
       updateLoose(dt);
       // Шарик растёт как ∛V — так его объём пропорционален количеству газа
       const r = Math.min(12 + Math.cbrt(shownV) * 6.5, 62);
-      balloon.setAttribute('rx', r * 0.82);
-      balloon.setAttribute('ry', r);
-      balloon.setAttribute('cy', FLASK.neckTop - 8 - r * 0.95);
+      balloonBody.setAttribute('d', balloonPath(FLASK_X, FLASK.neckTop - 6, r));
+      const cy = FLASK.neckTop - 14 - r * 0.95;
+      balloonShine.setAttribute('cx', FLASK_X - r * 0.36);
+      balloonShine.setAttribute('cy', cy - r * 0.38);
+      balloonShine.setAttribute('rx', r * 0.14);
+      balloonShine.setAttribute('ry', r * 0.26);
+      balloonShine.setAttribute('transform', `rotate(24 ${FLASK_X - r * 0.36} ${cy - r * 0.38})`);
       balloon.setAttribute('opacity', attached ? 1 : 0);
       collar.setAttribute('opacity', attached ? 1 : 0);
 

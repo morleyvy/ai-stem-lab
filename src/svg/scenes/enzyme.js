@@ -6,6 +6,7 @@
 // к горлышку пробирки — он падает на дно, и только тогда фермент начинает работать.
 
 import { beaker, bubblePool, createScene, cylinderShade, draggable, floorShadow, hotplate, readout, room, s, text } from '../kit.js';
+import { tr } from '../../i18n.js';
 
 const BENCH = 470;
 const PLATE = { x: 470, y: BENCH - 44, w: 300 };
@@ -189,7 +190,7 @@ export function enzymeScene(container, params, set, { activity }) {
       svg.append(tweezers);
 
       // Измеритель высоты пены стоит на столе справа
-      foamMeter = readout(d, { x: 760, y: BENCH - 76, w: 150, caption: 'Высота пены, см' });
+      foamMeter = readout(d, { x: 760, y: BENCH - 76, w: 150, caption: tr('Высота пены, см') });
       svg.append(foamMeter.g);
     },
 
