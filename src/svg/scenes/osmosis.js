@@ -7,7 +7,6 @@
 
 import { createScene, cylinderShade, floorShadow, readout, room, s } from '../kit.js';
 import { tr } from '../../i18n.js';
-import { sillPlants } from '../bioDecor.js';
 
 const BENCH = 470;
 const FIELD = { x: 575, y: 258, r: 200 };
@@ -53,7 +52,6 @@ export function osmosisScene(container, params, set, { massChange }) {
   const scene = createScene(container, {
     build(svg, d) {
       room(svg, d, { benchY: BENCH, theme: 'bio' });
-      sillPlants(svg, d, [{ x: 846, kind: 'leafy', scale: 0.85 }, { x: 896, kind: 'geranium', scale: 0.9 }]);
       const defs = svg.querySelector('defs');
       // Размытие изображения в окуляре: радиус меняется только при повороте винта
       const blurId = `blur${Math.random().toString(36).slice(2)}`;

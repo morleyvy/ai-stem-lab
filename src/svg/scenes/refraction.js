@@ -49,6 +49,38 @@ export function refractionScene(container, params, set, { refractionAngle, MEDIA
         s('rect', { x: cx - bw / 2, y: cy - 2, width: bw, height: 3, fill: '#94a3b8', 'fill-opacity': 0.6 }),
       ]));
 
+      // Оптическая шайба: круговая шкала в градусах вокруг точки падения, как на лабораторном
+      // оптическом диске. Отсчёт от нормали — 0° вверху и внизу, 90° на границе сред.
+      // Кольцо шкалы — снаружи дуги, по которой ходит указка, чтобы не перекрывать её.
+      const r1 = R + 14;
+      const scaleRing = s('g', { 'pointer-events': 'none' }, [
+        s('circle', { cx, cy, r: r1 + 12, fill: 'none', stroke: '#94a3b8', 'stroke-opacity': 0.25, 'stroke-width': 1 }),
+        s('circle', { cx, cy, r: r1, fill: 'none', stroke: '#94a3b8', 'stroke-opacity': 0.35, 'stroke-width': 1 }),
+      ]);
+      for (let deg = 0; deg < 360; deg += 5) {
+        const a = deg * DEG;
+        const major = deg % 30 === 0;
+        const len = major ? 12 : deg % 10 === 0 ? 7 : 4;
+        scaleRing.append(s('line', {
+          x1: cx + Math.sin(a) * r1, y1: cy - Math.cos(a) * r1,
+          x2: cx + Math.sin(a) * (r1 + len), y2: cy - Math.cos(a) * (r1 + len),
+          stroke: '#cbd5e1', 'stroke-opacity': major ? 0.6 : 0.35, 'stroke-width': major ? 1.4 : 1,
+        }));
+        // Подписи 90° легли бы на оправу блока по линии границы, нижний 0° — на край стола
+        if (major && deg !== 90 && deg !== 270 && deg !== 180) {
+          // Подпись — угол от ближайшей нормали (0…90), а не азимут по кругу
+          const fromNormal = Math.min(deg % 180, 180 - (deg % 180));
+          const lr = r1 + 24;
+          const label = s('text', {
+            x: cx + Math.sin(a) * lr, y: cy - Math.cos(a) * lr, 'font-size': 10, 'font-weight': 600, fill: '#94a3b8', 'fill-opacity': 0.7,
+            'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-family': 'Geologica, system-ui, sans-serif',
+          });
+          label.textContent = `${fromNormal}°`;
+          scaleRing.append(label);
+        }
+      }
+      svg.append(scaleRing);
+
       // Нормаль к границе (пунктир) — в темноте едва заметна, как нарисованная на планшете
       svg.append(s('line', { x1: cx, y1: cy - R - 30, x2: cx, y2: cy + R + 30, stroke: '#64748b', 'stroke-width': 1.5, 'stroke-dasharray': '6 6' }));
 

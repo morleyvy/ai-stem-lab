@@ -4,7 +4,6 @@
 
 import { beaker, bubblePool, createScene, floorShadow, readout, room, s, text } from '../kit.js';
 import { tr } from '../../i18n.js';
-import { sillPlants } from '../bioDecor.js';
 
 const PLANT_X = 500;
 const VESSEL = { x: PLANT_X, bottom: 440, w: 108, h: 200 };
@@ -18,7 +17,6 @@ export function transpirationScene(container, params, set, { transpirationRate }
   const scene = createScene(container, {
     build(svg, d) {
       room(svg, d, { benchY: 440, theme: 'bio' });
-      sillPlants(svg, d, [{ x: 640, kind: 'geranium', scale: 0.9 }, { x: 700, kind: 'leafy', scale: 0.85 }, { x: 885, kind: 'leafy' }]);
 
       // Стеклянная трубка потометра с водой — используем «стакан» как узкий сосуд
       vessel = beaker(d, VESSEL);

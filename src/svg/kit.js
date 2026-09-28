@@ -142,8 +142,18 @@ function sharedDefs(defs) {
     }
     return cache.get(key);
   };
+  // Узор-плитка (кафель, перфорация): одна плитка в defs вместо сотен элементов на сцене
+  const pattern = (key, w, h, children) => {
+    if (!cache.has(key)) {
+      const pid = id('p');
+      defs.append(s('pattern', { id: pid, width: w, height: h, patternUnits: 'userSpaceOnUse' }, children));
+      cache.set(key, `url(#${pid})`);
+    }
+    return cache.get(key);
+  };
   return {
     ...ids,
+    pattern,
     url: (k) => `url(#${ids[k]})`,
     // dir: 'h' — слева направо (объём цилиндров), 'v' — сверху вниз
     lin: (stops, dir = 'h') => gradient('linearGradient', stops, dir === 'h' ? { x1: 0, y1: 0, x2: 1, y2: 0 } : { x1: 0, y1: 0, x2: 0, y2: 1 }),
@@ -177,11 +187,39 @@ export function room(svg, d, { benchY = 430, theme = 'lab' } = {}) {
   const t = THEMES[theme] ?? THEMES.lab;
   svg.append(s('rect', { x: 0, y: 0, width: W, height: benchY, fill: d.lin([[0, t.wall[0]], [1, t.wall[1]]], 'v') }));
 
-  if (theme === 'stand') {
-    // Перфорированная панель физического стенда
-    const holes = s('g', { fill: '#c5ccd5' });
-    for (let y = 40; y < benchY - 30; y += 28) for (let x = 40; x < W - 20; x += 28) holes.append(s('circle', { cx: x, cy: y, r: 2.2 }));
-    svg.append(s('rect', { x: 20, y: 20, width: W - 40, height: benchY - 40, rx: 6, fill: '#e4e8ed', stroke: '#cbd2da' }), holes);
+  if (theme === 'lab') {
+    // Фартук над столом — гладкая панель чуть темнее стены с планкой по верху.
+    // Без швов плитки: мелкий повторяющийся узор спорит с посудой и делает сцену пёстрой.
+    const apronTop = benchY - 176;
+    svg.append(
+      s('rect', { x: 0, y: apronTop, width: W, height: benchY - apronTop, fill: d.lin([[0, '#e6ebf1'], [1, '#d9e0e8']], 'v') }),
+      s('rect', { x: 0, y: apronTop - 6, width: W, height: 6, fill: d.lin([[0, '#c3ccd7'], [1, '#d7dee6']], 'v') }),
+      s('rect', { x: 0, y: apronTop, width: W, height: 1.5, fill: '#ffffff', 'fill-opacity': 0.8 }),
+    );
+  } else if (theme === 'stand') {
+    // Панель физического стенда: гладкий матовый лист в алюминиевой рамке. Без сетки отверстий —
+    // мелкий повторяющийся узор спорил с приборами и делал сцену пёстрой.
+    const px = 20;
+    const py = 20;
+    const pw = W - 40;
+    const ph = benchY - 40;
+    svg.append(
+      s('rect', { x: px - 4, y: py - 4, width: pw + 8, height: ph + 8, rx: 8, fill: d.lin([[0, '#f8fafc'], [0.5, '#cbd5e1'], [1, '#94a3b8']], 'v') }),
+      s('rect', { x: px, y: py, width: pw, height: ph, rx: 5, fill: d.lin([[0, '#eef1f5'], [1, '#dfe4ea']], 'v') }),
+      // Свет сверху: верх панели светлее, низ уходит в лёгкую тень
+      s('rect', { x: px, y: py, width: pw, height: ph, rx: 5, fill: d.lin([[0, '#ffffff', 0.4], [0.45, '#ffffff', 0], [1, '#0f172a', 0.07]], 'v') }),
+      ...[[px + 12, py + 12], [px + pw - 12, py + 12], [px + 12, py + ph - 12], [px + pw - 12, py + ph - 12]].map(([cx, cy]) => screw(d, cx, cy)),
+    );
+  } else if (theme === 'dark') {
+    // Задёрнутые светонепроницаемые шторы: мягкие вертикальные складки, едва различимые в темноте
+    const folds = d.pattern('curtain', 110, 10, [
+      s('rect', { width: 110, height: 10, fill: d.lin([[0, '#000000', 0.14], [0.35, '#ffffff', 0.02], [0.55, '#ffffff', 0.03], [0.8, '#000000', 0.06], [1, '#000000', 0.14]]) }),
+    ]);
+    svg.append(
+      s('rect', { x: 0, y: 0, width: W, height: benchY, fill: folds }),
+      s('rect', { x: 0, y: 0, width: W, height: 14, fill: '#0b0e13' }),
+      s('rect', { x: 0, y: 14, width: W, height: 30, fill: d.lin([[0, '#000000', 0.45], [1, '#000000', 0]], 'v') }),
+    );
   } else if (theme === 'bio') {
     // Окно с дневным светом и подоконником
     svg.append(
@@ -206,12 +244,37 @@ export function room(svg, d, { benchY = 430, theme = 'lab' } = {}) {
 
   if (t.light) svg.append(s('ellipse', { cx: W * 0.45, cy: 0, rx: W * 0.6, ry: benchY * 0.9, fill: d.rad([[0, '#ffffff', t.light], [1, '#ffffff', 0]], 0.5, 0.2) }));
   svg.append(
+    // Затенение угла, где стена сходится со столом: без него стол «висит» перед стеной
+    s('rect', { x: 0, y: benchY - 60, width: W, height: 50, fill: d.lin([[0, '#0f172a', 0], [1, '#0f172a', theme === 'dark' ? 0.25 : 0.09]], 'v') }),
     s('rect', { x: 0, y: benchY - 10, width: W, height: 10, fill: d.lin([[0, t.apron[0]], [1, t.apron[1]]], 'v') }),
     s('rect', { x: 0, y: benchY, width: W, height: 16, fill: d.lin([[0, t.top[0]], [1, t.top[1]]], 'v') }),
     s('rect', { x: 0, y: benchY, width: W, height: 1.5, fill: t.edge, 'fill-opacity': 0.8 }),
     s('rect', { x: 0, y: benchY + 16, width: W, height: H - benchY - 16, fill: d.lin([[0, t.front[0]], [1, t.front[1]]], 'v') }),
   );
+  if (theme === 'stand') {
+    // Волокна светлого дерева на торце столешницы — едва заметные, чтобы не спорить с приборами
+    const grain = s('g', { fill: 'none', stroke: '#5c4128', 'stroke-opacity': 0.12, 'stroke-width': 1.2 });
+    for (let i = 0; i < 7; i++) {
+      const y = benchY + 26 + i * ((H - benchY - 34) / 7);
+      const k = (i % 3) * 37;
+      grain.append(s('path', { d: `M0 ${y} C ${180 + k} ${y - 4}, ${360 - k} ${y + 5}, ${520 + k} ${y} S ${820 - k} ${y - 4}, ${W} ${y + 2}` }));
+    }
+    svg.append(grain);
+  }
+  svg.append(
+    // Скруглённая передняя кромка ловит свет, под ней — тень свеса столешницы
+    s('rect', { x: 0, y: benchY + 14, width: W, height: 2, fill: '#ffffff', 'fill-opacity': theme === 'dark' ? 0.06 : 0.3 }),
+    s('rect', { x: 0, y: benchY + 16, width: W, height: 14, fill: d.lin([[0, '#000000', 0.28], [1, '#000000', 0]], 'v') }),
+  );
   return benchY;
+}
+
+// Винт с крестовым шлицем — крепёж панелей и корпусов приборов
+function screw(d, cx, cy, r = 4) {
+  return s('g', {}, [
+    s('circle', { cx, cy, r, fill: d.rad(['#f1f5f9', '#94a3b8'], 0.35, 0.3), stroke: '#64748b', 'stroke-width': 0.8 }),
+    s('path', { d: `M${cx - r * 0.55} ${cy} H${cx + r * 0.55} M${cx} ${cy - r * 0.55} V${cy + r * 0.55}`, stroke: '#64748b', 'stroke-width': 1 }),
+  ]);
 }
 
 export function floorShadow(cx, cy, rx, d, ry = rx * 0.18) {
@@ -353,12 +416,26 @@ export function dial(d, { x, y, r = 44, letter, color = '#dc2626' }) {
 }
 
 // Цифровой прибор: подпись и значение — на его собственном табло, а не поверх сцены
+// Корпус как у лабораторного прибора: фаска по верхней кромке, индикатор питания,
+// утопленный ЖК-экран. Цифры моноширинные — значение не «прыгает» при смене.
 export function readout(d, { x, y, w = 150, caption, color = '#34d399' }) {
-  const value = text(x + w / 2, y + 44, '', { size: 22, weight: 700, fill: color });
+  const value = text(x + w / 2, y + 44, '', { size: 24, weight: 700, fill: color });
+  value.style.fontVariantNumeric = 'tabular-nums';
+  // Длинная подпись («угол преломления β») на узком табло ужимается, чтобы не наезжать на индикатор
+  const captionSize = caption ? Math.min(12, (w - 30) / (caption.length * 0.56)) : 12;
+  const sx = x + 8;
+  const sy = y + 24;
+  const sw = w - 16;
   const g = s('g', { filter: d.url('soft') }, [
-    s('rect', { x, y, width: w, height: 70, rx: 14, fill: d.lin([[0, '#475569'], [1, '#1e293b']], 'v') }),
-    s('rect', { x: x + 8, y: y + 24, width: w - 16, height: 38, rx: 7, fill: '#0f172a' }),
-    caption ? text(x + w / 2, y + 13, caption, { size: 11, weight: 600, fill: '#cbd5e1' }) : null,
+    s('rect', { x, y, width: w, height: 70, rx: 12, fill: d.lin([[0, '#465467'], [0.5, '#2b3544'], [1, '#1a212c']], 'v'), stroke: '#0b1017', 'stroke-width': 1 }),
+    s('rect', { x: x + 1.5, y: y + 1.5, width: w - 3, height: 22, rx: 10, fill: d.lin([[0, '#ffffff', 0.16], [1, '#ffffff', 0]], 'v') }),
+    caption ? text(x + w / 2 - 4, y + 13, caption, { size: captionSize, weight: 600, fill: '#c5cfdb' }) : null,
+    s('circle', { cx: x + w - 11, cy: y + 12.5, r: 4.5, fill: color, 'fill-opacity': 0.18 }),
+    s('circle', { cx: x + w - 11, cy: y + 12.5, r: 2.2, fill: color }),
+    // Экран утоплен в корпус: светлая кромка снизу, тёмная сверху
+    s('rect', { x: sx - 1, y: sy - 1, width: sw + 2, height: 40, rx: 7, fill: d.lin([[0, '#05080d'], [1, '#56657a']], 'v') }),
+    s('rect', { x: sx, y: sy, width: sw, height: 38, rx: 6, fill: d.lin([[0, '#0a0f18'], [1, '#111a27']], 'v') }),
+    s('rect', { x: sx, y: sy, width: sw, height: 8, rx: 6, fill: d.lin([[0, '#000000', 0.45], [1, '#000000', 0]], 'v') }),
     value,
   ]);
   return { g, set: (v) => { value.textContent = v; } };

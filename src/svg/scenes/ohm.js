@@ -48,10 +48,15 @@ export function ohmScene(container, params, set) {
     build(svg, d) {
       room(svg, d, { benchY: BENCH_Y, theme: 'stand' });
 
-      // Контуры гнёзд на перфопанели: куда ставить каждую деталь
+      // Гнёзда на стенде: утопленные площадки под каждую деталь — тень по верхней кромке,
+      // блик по нижней. Видно, куда ставить деталь, без пунктирных «заглушек».
+      const inset = d.lin([[0, '#0f172a', 0.14], [0.18, '#0f172a', 0.05], [1, '#ffffff', 0.35]], 'v');
       for (const p of Object.values(PARTS)) {
         const [x, y, w, h] = p.box;
-        svg.append(s('rect', { x: p.slot.x + x, y: p.slot.y + y, width: w, height: h, rx: 8, fill: '#d5dbe3', 'fill-opacity': 0.6, stroke: '#94a3b8', 'stroke-width': 1.5, 'stroke-dasharray': '6 5' }));
+        svg.append(
+          s('rect', { x: p.slot.x + x - 4, y: p.slot.y + y - 4, width: w + 8, height: h + 8, rx: 10, fill: '#d3d9e1' }),
+          s('rect', { x: p.slot.x + x - 4, y: p.slot.y + y - 4, width: w + 8, height: h + 8, rx: 10, fill: inset, stroke: '#b4bdc9', 'stroke-width': 1 }),
+        );
       }
 
       // Провода стенда: до сборки висят бледно, после — «защёлкиваются» и вспыхивают

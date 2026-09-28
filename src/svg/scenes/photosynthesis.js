@@ -6,7 +6,6 @@
 
 import { beaker, createScene, cylinderShade, draggable, floorShadow, readout, room, s } from '../kit.js';
 import { tr } from '../../i18n.js';
-import { sillPlants } from '../bioDecor.js';
 
 const BENCH = 470;
 const JAR = { x: 700, bottom: 460, w: 170, h: 280 };
@@ -48,7 +47,6 @@ export function photosynthesisScene(container, params, set, { bubbleRate }) {
   const scene = createScene(container, {
     build(svg, d) {
       room(svg, d, { benchY: BENCH, theme: 'bio' });
-      sillPlants(svg, d, [{ x: 906, kind: 'leafy', scale: 0.75 }]);
       const defs = svg.querySelector('defs');
       const beamId = `beam${Math.random().toString(36).slice(2)}`;
       defs.append(s('linearGradient', { id: beamId, x1: 0, x2: 1 }, [

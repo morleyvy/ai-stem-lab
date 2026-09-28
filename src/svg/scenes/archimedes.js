@@ -3,7 +3,7 @@
 // и опускает тело в жидкость: пружина сокращается на величину выталкивающей силы и слегка
 // покачивается. Плавающее тело всплывает, нить провисает, динамометр показывает ноль.
 
-import { createScene, draggable, floorShadow, room, s, shade, text } from '../kit.js';
+import { createScene, draggable, floorShadow, room, s, text } from '../kit.js';
 import { tr } from '../../i18n.js';
 
 const BENCH_Y = 460;
@@ -38,6 +38,7 @@ export function archimedesScene(container, params, set, { liquidOf, weight, G })
   let ext = 0;
   let extV = 0;
   let rise = 0;
+  let bodyShine, bodyEye, materials;
   let bodyTop = 0;
   let fmax = 0;
   let t = 0;
@@ -72,8 +73,17 @@ export function archimedesScene(container, params, set, { liquidOf, weight, G })
 
       // Тело и нить
       thread = s('path', { fill: 'none', stroke: '#334155', 'stroke-width': 1.5 });
-      body = s('rect', { rx: 4, stroke: '#0f172a', 'stroke-opacity': 0.25 });
-      svg.append(thread, body);
+      // Тело: заливка по материалу (дерево с волокнами, алюминий, сталь), поверх — объём
+      // (свет сверху-слева) и ушко для нити. Градиенты в долях тела, поэтому годятся для любого размера.
+      materials = {
+        wood: d.lin([[0, '#b98a52'], [0.18, '#d6ad74'], [0.24, '#c49660'], [0.45, '#dcb57e'], [0.52, '#c7995f'], [0.78, '#d8b078'], [0.85, '#be8f57'], [1, '#a97a45']]),
+        alu: d.lin([[0, '#aab4c1'], [0.3, '#eef2f6'], [0.55, '#c9d1db'], [1, '#8e99a8']]),
+        steel: d.lin([[0, '#56606d'], [0.3, '#a3adb9'], [0.55, '#78828f'], [1, '#434b56']]),
+      };
+      body = s('rect', { rx: 3, stroke: '#0f172a', 'stroke-opacity': 0.35 });
+      bodyShine = s('rect', { rx: 3, fill: d.lin([[0, '#ffffff', 0.4], [0.12, '#ffffff', 0.08], [0.8, '#000000', 0], [1, '#000000', 0.18]], 'v'), 'pointer-events': 'none' });
+      bodyEye = s('circle', { r: 3.5, fill: 'none', stroke: '#475569', 'stroke-width': 2, 'pointer-events': 'none' });
+      svg.append(thread, bodyEye, body, bodyShine);
 
       // Динамометр: прозрачный корпус-планка со шкалой, пружина, красный указатель, тяга с крючком
       spring = s('path', { fill: 'none', stroke: '#64748b', 'stroke-width': 1.8, 'stroke-linejoin': 'round' });
@@ -193,12 +203,15 @@ export function archimedesScene(container, params, set, { liquidOf, weight, G })
 
       // Цвет тела: от лёгкого дерева к тяжёлому металлу
       const heavy = Math.min(1, params.rho / 8000);
-      const bodyColor = heavy < 0.12 ? '#c9a06a' : heavy < 0.5 ? '#94a3b8' : '#64748b';
-      body.setAttribute('x', VX - size / 2);
-      body.setAttribute('y', bodyTop);
-      body.setAttribute('width', size);
-      body.setAttribute('height', size);
-      body.setAttribute('fill', shade(bodyColor, 0.05));
+      body.setAttribute('fill', heavy < 0.12 ? materials.wood : heavy < 0.5 ? materials.alu : materials.steel);
+      for (const r of [body, bodyShine]) {
+        r.setAttribute('x', VX - size / 2);
+        r.setAttribute('y', bodyTop);
+        r.setAttribute('width', size);
+        r.setAttribute('height', size);
+      }
+      bodyEye.setAttribute('cx', VX);
+      bodyEye.setAttribute('cy', bodyTop - 2);
 
       for (const r of [liquidBack, liquidFront]) {
         r.setAttribute('y', surf);
