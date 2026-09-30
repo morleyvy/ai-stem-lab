@@ -9,8 +9,8 @@
 import { ALL_LESSONS, SUBJECT_BY_ID } from './data/catalog.js';
 import { t, tr } from './i18n.js';
 import {
-  HINT_MAX, LIVE_MAX_AGE_MS, cleanHintText, computeStatus, createSim, createTracker, seededRng,
-  simHint, simTick, summarize, topicFor, validateHint, validatePresence,
+  HINT_MAX, LIVE_MAX_AGE_MS, cleanHintText, computeStatus, createTracker,
+  summarize, topicFor, validateHint, validatePresence,
 } from './liveCore.js';
 
 const el = (tag, className, text) => Object.assign(document.createElement(tag), { className: className ?? '', textContent: text ?? '' });
@@ -27,13 +27,8 @@ function button(text, onClick, className = 'ghost small') {
 const POLL_MS = 30_000;
 // Состояние ученика отправляем не чаще раза в секунду: иначе быстрые клики забьют канал
 const TRACK_MS = 1000;
-const DEMO_TICK_MS = 1000;
-const DEMO_LESSON = 'activity';
-// Имена для демонстрации — вымышленные, в обоих языках одинаковые
-const DEMO_NAMES = [
-  'Айгерим Сапарова', 'Нурлан Ахметов', 'Дана Жумабаева', 'Арман Касымов', 'Алия Нурланова', 'Ерлан Искаков',
-  'Мадина Серикова', 'Данияр Оспанов', 'Жанель Абенова', 'Тимур Каримов', 'Аружан Бекова', 'Санжар Муратов',
-];
+// Панель учителя перерисовывается раз в секунду: время на шаге у учеников идёт и без событий
+const BOARD_TICK_MS = 1000;
 
 const findLesson = (id) => ALL_LESSONS.find((l) => l.id === id) ?? null;
 
@@ -53,19 +48,16 @@ function mmss(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function createLive({ client, getUser, toast, openLessonById, coach }) {
+export function createLive({ client, getUser, toast, openLessonById, coach, signIn }) {
   // ---------- Учитель ----------
   let screen = null; // разметка панели учителя, создаётся при первом открытии
-  let board = null; // { klass, lessonId, lesson, demo, channel, sim, entries, cards, timer, teacherId }
+  let board = null; // { klass, lessonId, lesson, channel, entries, cards, timer, teacherId }
   let opener = null;
 
   // ---------- Ученик ----------
-  let student = null; // { session, channel, tracker, trackTimer, demo }
+  let student = null; // { session, channel, tracker, trackTimer }
   let pollTimer = null;
   let bannerHost = null;
-  let demoStudent = false;
-  // Демо-шина: подсказка из демо-панели учителя доходит до «ученика» в этом же браузере
-  let demoHint = null;
 
   // ================= Кабинет учителя: карточка «Живой урок» =================
 
@@ -96,9 +88,8 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
     }
     const note = el('p', 'muted small lv-card-note', t('live.cardSub'));
     const start = button(t('live.start'), () => startReal(klass, students, select.value, start, note), 'primary');
-    const demo = button(t('live.demo'), () => openDemo(klass.name, select.value));
     const row = el('div', 'lv-card-row');
-    row.append(select, start, demo);
+    row.append(select, start);
     card.replaceChildren(el('h2', '', t('live.title')), note, row);
 
     // Урок уже идёт (учитель перезагрузил страницу) — предлагаем вернуться к панели
@@ -144,7 +135,7 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
       return;
     }
     btn.disabled = false;
-    openBoard({ klass, lessonId, students: students.map((s) => ({ uid: s.id, name: s.full_name })), demo: false, teacherId: user.id });
+    openBoard({ klass, lessonId, students: students.map((s) => ({ uid: s.id, name: s.full_name })), teacherId: user.id });
     connectTeacher();
   }
 
@@ -185,55 +176,24 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
     }
   }
 
-  // ================= Демонстрация =================
-
-  function openDemo(className, lessonId) {
-    const lesson = findLesson(lessonId) ?? findLesson(DEMO_LESSON) ?? ALL_LESSONS[0];
-    const now = Date.now();
-    const sim = createSim(lesson, { names: DEMO_NAMES, now, rng: seededRng(Math.floor(now / 1000)) });
-    openBoard({
-      klass: { id: 'demo', name: className ?? t('live.demoClass') },
-      lessonId: lesson.id,
-      students: sim.students.map((s) => ({ uid: s.uid, name: s.name })),
-      demo: true,
-    });
-    board.sim = sim;
-    syncDemo();
-    renderBoard();
-  }
-
-  function syncDemo() {
-    for (const e of board.entries) {
-      const s = board.sim.students.find((x) => x.uid === e.uid);
-      e.state = s.state ? { ...s.tracker.state, w: [...s.tracker.state.w] } : null;
-      e.seenAt = s.seenAt;
-      e.left = s.left;
-    }
-  }
-
   // ================= Панель учителя =================
 
-  function openBoard({ klass, lessonId, students, demo, teacherId = null }) {
+  function openBoard({ klass, lessonId, students, teacherId }) {
     closeBoard();
     opener = document.activeElement;
     board = {
       klass,
       lessonId,
       lesson: findLesson(lessonId),
-      demo,
       teacherId,
       channel: null,
-      sim: null,
       entries: students.map((s) => ({ ...s, state: null, seenAt: null, left: false })),
       cards: new Map(),
       target: undefined,
       confirmEnd: null,
     };
     buildScreen();
-    board.timer = setInterval(() => {
-      if (board.demo && simTick(board.sim, Date.now())) syncDemo();
-      renderBoard();
-    }, DEMO_TICK_MS);
+    board.timer = setInterval(renderBoard, BOARD_TICK_MS);
     renderBoard();
     screen.hidden = false;
     document.body.classList.add('lv-open');
@@ -263,7 +223,6 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
     title.tabIndex = -1;
     const titleRow = el('div', 'lv-title-row');
     titleRow.append(el('span', 'lv-dot'), title);
-    if (b.demo) titleRow.append(el('span', 'lv-badge', t('live.demoBadge')));
     const head = el('div', 'lv-head');
     const info = el('div', 'lv-head-info');
     info.append(titleRow, el('p', 'muted', `${b.klass.name} · ${lessonLabel(b.lessonId)}`));
@@ -275,13 +234,12 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
     const error = el('p', 'lv-error', '');
     error.hidden = true;
     error.setAttribute('role', 'alert');
-    const note = b.demo ? el('p', 'lv-demo-note small', t('live.demoNote')) : null;
     const summary = el('div', 'lv-summary');
     const composer = buildComposer();
     const grid = el('div', 'lv-grid');
     grid.setAttribute('aria-label', t('live.gridLabel'));
     const inner = el('div', 'lv-inner');
-    inner.append(head, ...(note ? [note] : []), error, summary, composer, grid);
+    inner.append(head, error, summary, composer, grid);
     screen.replaceChildren(inner);
     Object.assign(b, { ui: { error, summary, composer, grid } });
   }
@@ -412,13 +370,8 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
   function sendHint({ kind, text = '' }) {
     const b = board;
     const to = b.target ?? null;
-    if (b.demo) {
-      simHint(b.sim, to, Date.now());
-      demoHint = { kind, text };
-    } else {
-      if (!b.channel) return;
-      b.channel.send({ type: 'broadcast', event: 'hint', payload: { from: b.teacherId, to, kind, text } });
-    }
+    if (!b.channel) return;
+    b.channel.send({ type: 'broadcast', event: 'hint', payload: { from: b.teacherId, to, kind, text } });
     b.ui.composer.hidden = true;
     const who = to ? b.entries.find((e) => e.uid === to)?.name : null;
     toast(who ? t('live.sentTo', { name: who }) : t('live.sentAll'));
@@ -438,20 +391,18 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
       return;
     }
     clearTimeout(b.confirmEnd);
-    if (!b.demo) {
-      b.channel?.send({ type: 'broadcast', event: 'stop', payload: { from: b.teacherId } });
-      const { error } = await client.from('live_sessions').delete().eq('class_id', b.klass.id);
-      if (error) {
-        setBoardError(t('live.endFail'));
-        console.error('[live]', error);
-        return;
-      }
+    b.channel?.send({ type: 'broadcast', event: 'stop', payload: { from: b.teacherId } });
+    const { error } = await client.from('live_sessions').delete().eq('class_id', b.klass.id);
+    if (error) {
+      setBoardError(t('live.endFail'));
+      console.error('[live]', error);
+      return;
     }
     closeBoard();
     toast(t('live.ended'));
     // Кнопка «Начать» в кабинете снова должна предлагать новый урок, а не «Вернуться»
     const card = document.querySelector('.lv-card');
-    if (card && !b.demo) {
+    if (card) {
       card.querySelector('.lv-card-note').textContent = t('live.cardSub');
       card.querySelector('button.primary').textContent = t('live.start');
     }
@@ -459,7 +410,7 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
 
   // ================= Ученик =================
 
-  // Вызывается при каждой отрисовке меню: баннер идущего урока у ученика (у гостя — только после демо «глазами ученика»)
+  // Вызывается при каждой отрисовке меню: баннер идущего урока у ученика
   async function renderMenu(anchor) {
     const user = getUser();
     if (!bannerHost) {
@@ -470,12 +421,10 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
     clearInterval(pollTimer);
     pollTimer = null;
     if (!user) {
-      if (student && !student.demo) leaveStudent();
-      if (demoStudent) showStudentBanner({ lesson_id: DEMO_LESSON }, true);
-      else bannerHost.replaceChildren();
+      leaveStudent();
+      bannerHost.replaceChildren();
       return;
     }
-    demoStudent = false;
     if (user.role !== 'student' || !user.class || !client) {
       bannerHost.replaceChildren();
       return;
@@ -497,67 +446,71 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
       return;
     }
     if (!session) {
-      if (student && !student.demo) leaveStudent();
+      leaveStudent();
       bannerHost.replaceChildren();
       return;
     }
     if (student && student.session.lesson_id !== session.lesson_id) leaveStudent();
-    showStudentBanner(session, false);
+    showStudentBanner(session);
   }
 
-  // Вход в демонстрацию — в профиле гостя, а не в меню: меню остаётся для работ,
-  // а демо нужно тому, кто знакомится с практикумом (учитель, завуч, показ на видео)
+  // Карточка «Живой урок» в профиле: гостю — как начать или подключиться, ученику — кнопка
+  // подключения. У учителя своя карточка в кабинете (renderTeacherCard).
   function renderAccount(anchor) {
-    anchor.parentElement.querySelector('.lv-banner-demo')?.remove();
-    if (getUser()) return;
-    anchor.after(guestDemoCard());
+    anchor.parentElement.querySelector('.lv-account-card')?.remove();
+    const user = getUser();
+    if (user?.role === 'teacher') return;
+    anchor.after(accountCard(user));
   }
 
-  function guestDemoCard() {
-    const box = el('div', 'lv-banner lv-banner-demo');
+  function accountCard(user) {
+    const box = el('div', 'lv-banner lv-account-card');
     const text = el('div', 'lv-banner-text');
-    const title = el('div', 'lv-banner-title');
-    title.append(el('span', 'lv-badge', t('live.demoBadge')), document.createTextNode(` ${t('live.guestTitle')}`));
-    text.append(title, el('div', 'lv-banner-sub', t('live.guestSub')));
+    text.append(el('div', 'lv-banner-title', t('live.title')), el('div', 'lv-banner-sub', t(user ? 'live.studentSub' : 'live.guestSub')));
     const actions = el('div', 'lv-banner-actions');
-    actions.append(
-      button(t('live.demo'), () => openDemo(null, DEMO_LESSON), 'primary small'),
-      // Сразу в работу: баннер «Идёт живой урок» гость увидит в меню, когда вернётся из неё
-      button(t('live.demoStudent'), () => {
-        demoStudent = true;
-        joinStudent({ lesson_id: DEMO_LESSON }, true);
-      }),
-    );
+    const join = button(t('live.joinLesson'), () => joinFromAccount(join), user ? 'primary' : 'ghost');
+    // Гостю начать урок нельзя — нужен вход учителя; кнопка ведёт ко входу и говорит зачем
+    if (!user) actions.append(button(t('live.start'), () => askSignIn('live.needTeacher'), 'primary'));
+    actions.append(join);
     box.append(text, actions);
     return box;
   }
 
-  function showStudentBanner(session, demo) {
+  function askSignIn(key) {
+    toast(t(key));
+    signIn();
+  }
+
+  async function joinFromAccount(btn) {
+    const user = getUser();
+    if (!user) return askSignIn('live.needStudent');
+    if (!user.class) return toast(t('live.noClass'));
+    btn.disabled = true;
+    const { session } = await loadSession(user.class.id);
+    btn.disabled = false;
+    if (session) joinStudent(session);
+    else toast(t('live.noSession'));
+  }
+
+  function showStudentBanner(session) {
     const joined = student?.session.lesson_id === session.lesson_id;
     const box = el('div', 'lv-banner');
     const text = el('div', 'lv-banner-text');
     const title = el('div', 'lv-banner-title');
     title.append(el('span', 'lv-dot'), document.createTextNode(` ${t('live.bannerTitle')}`));
-    if (demo) title.append(document.createTextNode(' '), el('span', 'lv-badge', t('live.demoBadge')));
     text.append(title, el('div', 'lv-banner-sub', lessonLabel(session.lesson_id)));
-    const join = button(t(joined ? 'live.backToWork' : 'live.join'), () => joinStudent(session, demo), 'primary');
+    const join = button(t(joined ? 'live.backToWork' : 'live.join'), () => joinStudent(session), 'primary');
     box.append(text, join);
     bannerHost.replaceChildren(box);
   }
 
-  async function joinStudent(session, demo) {
+  async function joinStudent(session) {
     if (!student || student.session.lesson_id !== session.lesson_id) {
       leaveStudent();
-      student = { session, demo, channel: null, tracker: null, trackTimer: null };
-      if (!demo) connectStudent();
+      student = { session, channel: null, tracker: null, trackTimer: null };
+      connectStudent();
     }
     if (!openLessonById(session.lesson_id)) toast(t('live.noLesson'));
-    // Демонстрация: подсказка «учителя» приходит через несколько секунд по локальной шине
-    if (demo) {
-      setTimeout(() => {
-        if (student?.demo) receiveHint(demoHint ?? { kind: 'text', text: t('live.demoHintText') });
-      }, 4000);
-    }
   }
 
   function connectStudent() {
@@ -599,7 +552,7 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
     if (!s.tracker) return;
     s.tracker.apply(event);
     s.lastStep = lesson.steps[s.tracker.state.i];
-    if (s.demo || s.trackTimer) return;
+    if (s.trackTimer) return;
     s.trackTimer = setTimeout(() => {
       s.trackTimer = null;
       if (s.tracker) s.channel?.track(s.tracker.state);
@@ -634,7 +587,6 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
     const close = button('×', () => card.remove(), 'ghost lv-hint-close');
     close.setAttribute('aria-label', t('live.hintClose'));
     card.append(body, close);
-    if (student?.demo) card.prepend(el('span', 'lv-badge', t('live.demoBadge')));
     document.querySelector('.lv-hint')?.remove();
     coach.before(card);
     // Ученик сейчас не в работе — карточку у шага он не увидит, поэтому ещё и всплывающее сообщение
@@ -646,5 +598,5 @@ export function createLive({ client, getUser, toast, openLessonById, coach }) {
     if (board?.channel) client.removeChannel(board.channel);
   });
 
-  return { renderTeacherCard, renderMenu, renderAccount, progress, lessonClosed, openDemo, receiveHint };
+  return { renderTeacherCard, renderMenu, renderAccount, progress, lessonClosed, receiveHint };
 }

@@ -1705,8 +1705,6 @@ body.lv-open > .chat { display: none; }
   .lv-dot { animation: lv-pulse 1.8s ease-in-out infinite; }
 }
 @keyframes lv-pulse { 50% { box-shadow: 0 0 0 7px rgba(229, 72, 77, 0.06); } }
-.lv-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; padding: 2px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); border: 1px solid #f3d19c; vertical-align: middle; }
-.lv-demo-note { background: var(--warn-soft); color: var(--warn); border-radius: var(--radius-sm); padding: 8px 14px; }
 .lv-error { color: var(--bad); background: var(--bad-soft); border-radius: var(--radius-sm); padding: 8px 14px; }
 
 .lv-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 2fr); gap: 12px; }
@@ -1750,7 +1748,6 @@ body.lv-open > .chat { display: none; }
 
 /* Баннер ученика в меню — над обычным баннером и спокойнее его */
 .lv-banner { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; padding: 16px 22px; border-radius: var(--radius); background: #fff; border: 2px solid #f5c2c4; box-shadow: var(--shadow); margin-bottom: 16px; }
-.lv-banner-demo { border-color: #f3d19c; }
 .lv-banner-text { flex: 1 1 260px; }
 .lv-banner-title { font-weight: 500; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lv-banner-sub { color: var(--muted); font-size: 0.93rem; }
@@ -2114,4 +2111,46 @@ body.focus .chat-hint { display: none; }
   #menuLogout { color: var(--bad); }
   /* Предметы — своя строка под шапкой, прокручивается вместе со страницей */
   .top-nav:not([hidden]) { display: flex; margin: 12px 12px 0; }
+}
+
+/* ---------- Аватар, название, достижения ---------- */
+.avatar { color: #fff; overflow: hidden; }
+.avatar svg { display: block; }
+.brand-name { font-size: 1rem; }
+@media (max-width: 720px) {
+  .top .brand-name { font-size: 0.98rem; }
+  .top .logo { width: 34px; height: 34px; }
+}
+
+/* Достижения — сетка значков: название под иконкой, условие по нажатию (см. main.js) */
+.badge-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.badge-item {
+  position: relative;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 0;
+  padding: 14px 6px 12px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: none;
+  text-align: center;
+  font-weight: 400;
+}
+.badge-item .badge-icon { width: 44px; height: 44px; border-radius: 50%; }
+.badge-item .badge-icon svg { width: 22px; height: 22px; }
+.badge-item .badge-name { font-size: 0.8rem; font-weight: 500; line-height: 1.25; color: var(--muted); }
+.badge-item.got .badge-name { color: var(--text); font-weight: 600; }
+.badge-item.got { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+/* Полученное отмечено галочкой в углу — не только цветом */
+.badge-item.got::after { content: '✓'; position: absolute; top: 6px; right: 9px; font-size: 0.8rem; font-weight: 700; color: var(--good); }
+
+/* Телефон: статистика — сетка 2×2, а не четыре карточки столбиком; значков достижений — по 4 в ряд */
+@media (max-width: 720px) {
+  .stat-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat-row .stat { padding: 14px; }
+  .badge-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+  .badge-item { padding: 10px 4px; }
+  .badge-item .badge-icon { width: 38px; height: 38px; }
+  .badge-item .badge-name { font-size: 0.74rem; }
 }

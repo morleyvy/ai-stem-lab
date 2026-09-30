@@ -84,6 +84,8 @@ const live = createLive({
   client: account.realtimeClient(),
   getUser: () => user,
   toast,
+  // Гостю, который хочет начать урок или подключиться, нужен вход: выход из демо-режима ведёт на экран входа
+  signIn: () => $('logoutBtn').click(),
   coach: $('coach'),
   openLessonById: (id) => {
     const i = ALL_LESSONS.findIndex((l) => l.id === id);
@@ -339,14 +341,15 @@ async function saveResult(lessonId, stats) {
   toast(levelUp ? t('work.levelUp', { text: gained, level: lastProgress.level + 1 }) : gained);
 }
 
+const PERSON_ICON = '<svg viewBox="0 0 24 24" width="60%" height="60%" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4.2" fill="currentColor"/><path d="M3.8 21c.6-4.3 4-7 8.2-7s7.6 2.7 8.2 7z" fill="currentColor"/></svg>';
+
 function setUser(profile) {
   user = profile;
   $('userName').textContent = profile
     ? t('user.label', { name: profile.full_name, role: t(profile.role === 'teacher' ? 'role.teacher' : 'role.student'), grade: profile.grade })
     : t('user.demo');
-  $('avatar').textContent = profile
-    ? profile.full_name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
-    : t('user.demoInitial');
+  // Силуэт вместо инициалов: буква «Д» у гостя читалась как непонятный значок
+  $('avatar').innerHTML = PERSON_ICON;
 }
 
 // ---------- Личный кабинет ----------
@@ -628,7 +631,7 @@ function accountError(msg) {
 
 function renderAccount(p, assignments, results) {
   accountError(null);
-  $('profileAvatar').textContent = $('avatar').textContent;
+  $('profileAvatar').innerHTML = PERSON_ICON;
   $('profileName').textContent = user?.full_name ?? t('user.guestName');
   $('profileMeta').textContent = user
     ? t('acc.meta', { grade: user.grade, cls: user.class ? t('acc.metaClass', { name: user.class.name }) : t('acc.metaNoClass') })
@@ -688,15 +691,18 @@ function renderAccount(p, assignments, results) {
 
   // Достижения
   $('badgeCount').textContent = t('acc.badgeCount', { got: p.badges.filter((b) => b.got).length, total: p.badges.length });
+  // Значки, а не список из десяти строк: название под иконкой, условие — по нажатию.
+  // Статус словами остаётся в имени кнопки — для экранного диктора и без цветового зрения
   $('badgeGrid').replaceChildren(...p.badges.map((b) => {
-    const item = el('div', `badge-item ${b.got ? 'got' : 'locked'}`);
+    const status = t(b.got ? 'acc.got' : 'acc.notGot');
+    const item = el('button', `badge-item ${b.got ? 'got' : 'locked'}`);
+    item.type = 'button';
+    item.title = `${b.desc} — ${status}`;
+    item.setAttribute('aria-label', `${b.name}. ${b.desc}. ${status}`);
     const icon = el('span', 'badge-icon');
     icon.innerHTML = lineIcon(b.icon);
-    const text = el('span', 'badge-text');
-    text.append(el('b', 'badge-name', b.name), el('span', 'badge-desc', b.desc));
-    // Статус словами, а не только цветом иконки — различимо без цветового зрения и для скринридера
-    const status = b.got ? el('span', 'badge-status got', t('acc.got')) : el('span', 'badge-status muted small', t('acc.notGot'));
-    item.append(icon, text, status);
+    item.append(icon, el('span', 'badge-name', b.name));
+    item.onclick = () => toast(`${b.name}: ${b.desc} — ${status}`);
     return item;
   }));
 
@@ -1454,7 +1460,7 @@ function setSiteMenu(open) {
   const signedIn = !$('userBox').hidden;
   $('menuAccount').hidden = !signedIn;
   $('menuLogout').hidden = !signedIn;
-  $('menuAvatar').textContent = $('avatar').textContent;
+  $('menuAvatar').innerHTML = PERSON_ICON;
   $('menuName').textContent = $('userName').textContent;
   $('menuFont').setAttribute('aria-pressed', String(document.documentElement.classList.contains('large-text')));
   $('siteMenu').querySelector('.site-menu-item:not([hidden])')?.focus();
