@@ -553,7 +553,7 @@ body {
 }
 
 .dash { max-width: 1180px; margin: 0 auto; padding: 44px 24px 72px; }
-.greeting { text-align: center; font-size: clamp(2.2rem, 5.5vw, 4rem); font-weight: 600; letter-spacing: -0.02em; margin-bottom: 40px; }
+.greeting { text-align: center; font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 600; letter-spacing: -0.02em; margin-bottom: 32px; }
 .grad-text { background: linear-gradient(90deg, #1244d6, #0b8fcf); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
 .banner {
@@ -1985,7 +1985,7 @@ button.lv-hint-close { padding: 0; width: 32px; height: 32px; min-height: 32px; 
   .font-btn { justify-self: end; }
   .user-box { gap: 4px; }
   #logoutBtn { padding-inline: 10px; }
-  .greeting { font-size: 2rem; margin-bottom: 20px; }
+  .greeting { font-size: 1.7rem; margin-bottom: 18px; }
   /* Уведомление снизу, над кнопкой Шоқана: сверху оно закрывало шапку */
   .toast { top: auto; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); border-radius: 16px; font-size: 0.88rem; padding: 10px 16px; width: max-content; }
 }
@@ -2155,3 +2155,6 @@ body.focus .chat-hint { display: none; }
   .badge-item .badge-icon { width: 38px; height: 38px; }
   .badge-item .badge-name { font-size: 0.74rem; }
 }
+
+/* В шапке только логотип: название рядом с ним лишнее. Имя кнопки для экранного диктора — aria-label «На главную» */
+.top .brand-text { display: none; }
