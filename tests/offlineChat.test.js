@@ -95,3 +95,26 @@ test('симуляция: реплика после ответа — предл�
   answerOffline('Что показывают приборы?', { sim: ohm }, i18n, memory);
   assert.equal(answerOffline('Понятно', { sim: ohm }, i18n, memory), '[off.tryIt]');
 });
+
+import { PENDULUM } from '../src/sims/pendulum.js';
+const pendulum = { def: PENDULUM, params: { L: 1, m: 0.1, released: 0 } };
+const ru = { ...i18n, lang: 'ru' };
+
+test('«что будет, если» в симуляции: пересчёт самой симуляцией', () => {
+  const longer = answerOffline('Что будет, если увеличить длину нити в 2 раза?', { sim: pendulum }, ru);
+  assert.match(longer, /2,01 с → 2,84 с/);
+  // Масса на период не влияет — так и должен сказать пересчёт
+  assert.match(answerOffline('А если увеличить массу груза?', { sim: pendulum }, ru), /\[off\.simSame\]/);
+  assert.match(answerOffline('Кернеуді арттырсақ не болады?', { sim: ohm }, ru), /0,40 А → /);
+});
+
+test('частые вопросы: русский, казахский, другая формулировка', () => {
+  const facts = { sim: pendulum, subject: 'physics' };
+  assert.match(answerOffline('от массы зависит период?', facts, ru), /T = 2π√\(L\/g\)/);
+  assert.match(answerOffline('для чего в цепи нужен реостат', { sim: ohm, subject: 'physics' }, ru), /^Реостат/);
+  assert.match(answerOffline('Реостат не үшін керек?', { sim: ohm, subject: 'physics' }, { ...i18n, lang: 'kk' }), /кедергісін/);
+});
+
+test('частые вопросы: случайное совпадение первых букв не считается ответом', () => {
+  assert.equal(answerOffline('Расскажи анекдот', { subject: 'physics' }, ru), '[off.noExperiment]');
+});

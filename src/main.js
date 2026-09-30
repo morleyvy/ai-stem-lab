@@ -1363,16 +1363,16 @@ function chatContext() {
 }
 // Для ответов без интернета: те же данные, что уходят ИИ, но целиком — ответ собирается в браузере
 function offlineChatFacts() {
-  if (screen !== 'workspace') return {};
-  if (simCtrl) return { sim: { def: simCtrl.def, params: { ...simCtrl.params } } };
+  if (screen !== 'workspace') return { subject: activeSubject() };
+  if (simCtrl) return { subject: currentSubject, sim: { def: simCtrl.def, params: { ...simCtrl.params } } };
   if (mode === 'mission') return { mission: true };
-  return { bench: true, result: bench.state.result };
+  return { subject: currentSubject, lessonId: currentLessonId ?? undefined, bench: true, result: bench.state.result };
 }
 const chat = initChat({
   postJson,
   getContext: chatContext,
   screens: SCREENS.filter((id) => id !== 'auth'),
-  answerOffline: (question) => answerOffline(question, offlineChatFacts(), { t, tr }, offlineMemoryFor(chatContext())),
+  answerOffline: (question) => answerOffline(question, offlineChatFacts(), { t, tr, lang }, offlineMemoryFor(chatContext())),
 });
 
 // Память офлайн-ответов своя у каждого опыта: в новом опыте Шоқан снова объясняет с начала

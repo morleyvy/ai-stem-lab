@@ -5,6 +5,9 @@
 
 import { ALIASES, SUBSTANCES } from './data/substances.js';
 import { runExperiment } from './engine.js';
+// Казахские названия регуляторов нужны для разбора вопроса на любом языке интерфейса
+import KK_SIMS from './i18n/kk/content-sims.js';
+import { OFFLINE_FAQ } from './data/offlineFaq.js';
 
 // Корни слов на русском и казахском. Порядок важен: первый совпавший вид вопроса и определяет ответ.
 const INTENTS = [
@@ -28,10 +31,11 @@ export function detectIntent(question) {
 // facts: { sim: { def, params } | null, bench: открыт химический стол, result: итог движка | null, mission: bool }
 // memory — общее для всей переписки: какие вопросы из базы уже заданы и какой был прошлый ответ.
 // Без неё Шоқан на ответ ученика снова выдавал то же объяснение с тем же вопросом в конце.
-export function answerOffline(question, facts, { t, tr }, memory = newMemory()) {
-  const text = compose(question, facts, { t, tr }, memory);
+// i18n: { t, tr, lang } — переводчики и язык интерфейса (для готовых ответов на двух языках)
+export function answerOffline(question, facts, i18n, memory = newMemory()) {
+  const text = compose(question, facts, i18n, memory);
   // Тот же ответ второй раз подряд ничего не даёт — честно говорим, что без сети больше не знаем
-  if (text === memory.last) return t('off.again');
+  if (text === memory.last) return i18n.t('off.again');
   memory.last = text;
   return text;
 }
@@ -48,6 +52,16 @@ function compose(question, facts, i18n, memory) {
   // В миссии нельзя подсказывать вещества: даже «почему» по результату выдало бы ответ
   if (facts.mission) return t('off.mission');
 
+  // Пересчёт опыта точнее любой заготовки, поэтому он первый
+  const whatIf = facts.sim && simWhatIf(question, facts.sim, i18n);
+  if (whatIf) return whatIf;
+  const other = facts.bench && facts.result?.params && mentionedSubstance(question, facts.result.params.substances);
+  if (other) return substanceWhatIf(other, facts.result, i18n, memory);
+  // Показания и формулу берём из самого опыта; на остальное сначала ищем готовый проверенный ответ
+  if (!['readings', 'formula'].includes(intent)) {
+    const faq = searchFaq(question, facts, i18n.lang);
+    if (faq) return faq;
+  }
   if (facts.sim) return simAnswer(intent, facts.sim, i18n, memory);
   if (facts.bench) return benchAnswer(question, intent, facts.result, i18n, memory);
   return t('off.noExperiment');
@@ -72,11 +86,6 @@ function benchAnswer(question, intent, result, i18n, memory) {
   const { t, tr } = i18n;
   if (!result || result.status === 'need_more') return t('off.benchEmpty');
   if (intent === 'how') return t('off.followSteps');
-
-  // Ученик называет другое вещество («а если медь?», «с медью ничего не будет») —
-  // считаем этот опыт движком, так и вопрос из базы получает честный ответ
-  const other = mentionedSubstance(question, result.params.substances);
-  if (other) return whatIf(other, result, i18n, memory);
 
   if (intent === 'other' && memory.last) return t('off.again');
   return describeResult(result, intent, i18n, memory);
@@ -105,8 +114,10 @@ function mentionedSubstance(question, current) {
   return ALIASES.find(([id, patterns]) => !current.includes(id) && patterns.some((re) => re.test(q)))?.[0] ?? null;
 }
 
-// Меняем вещество той же формы (металл на металл, раствор на раствор), остальное оставляем как было
-function whatIf(id, result, i18n, memory) {
+// Ученик называет другое вещество («а если медь?», «с медью ничего не будет») — считаем этот опыт
+// движком, так и вопрос из базы получает честный ответ. Меняем вещество той же формы
+// (металл на металл, раствор на раствор), остальное оставляем как было
+function substanceWhatIf(id, result, i18n, memory) {
   const { t, tr } = i18n;
   const form = SUBSTANCES[id].form;
   const kept = result.params.substances.filter((s) => SUBSTANCES[s].form !== form);
@@ -116,4 +127,114 @@ function whatIf(id, result, i18n, memory) {
   const seen = next.observations?.length ? next.observations.map(tr).join('; ') : '';
   return [t('off.whatIf', { name }), seen && `${seen}.`, describeResult(next, 'formula', i18n, memory)]
     .filter(Boolean).join(' ');
+}
+
+// ---------- «Что будет, если…» в симуляции ----------
+// Симуляция сама считает показания при любых параметрах, поэтому ответ — это пересчёт опыта,
+// а не заготовленный текст: «период вырастет с 2,01 до 2,84 с» всегда совпадёт с тем, что покажет стенд.
+
+const UP = /увелич|больше|выше|повыс|длиннее|сильнее|тяжелее|добав|нагре|включ|дальше от|отодвин|арттыр|көбейт|жоғары|ұзар|қызд|қос|алыс/;
+const DOWN = /уменьш|меньше|ниже|пониз|короче|слабее|легче|убав|охлад|остуд|выключ|ближе|придвин|кеміт|азайт|төмен|қысқар|суыт|өшір|жақын/;
+// Слова, которыми о регуляторе спрашивают, хотя в его названии их нет
+// «Дальше» без «от» не берём: «что делать дальше» — это не про расстояние
+const SYNONYMS = { T: /нагре|охлад|остуд|тепл|холод|қызд|суыт/, t: /дольше|минут|секунд/, d: /ближе|дальше от|отодвин|придвин|жақын|алыс/ };
+
+const TIME_IDS = ['t', 'time'];
+
+const words = (text) => text.toLowerCase().replace(/ё/g, 'е').match(/[a-zа-яәіңғүұқөһ]+/g) ?? [];
+// Корень — первые четыре буквы: «длину», «длиной», «длина» совпадут; короткие служебные слова не участвуют
+const stems = (text) => words(text ?? '').filter((w) => w.length >= 4).map((w) => w.slice(0, 4));
+
+function simWhatIf(question, { def, params }, { t, tr }) {
+  const q = question.toLowerCase().replace(/ё/g, 'е');
+  const asked = new Set(stems(q));
+  const up = UP.test(q);
+  const down = DOWN.test(q);
+  const factor = Number(q.match(/(\d+(?:[.,]\d+)?)\s*(?:раз|есе)/)?.[1]?.replace(',', '.'));
+  const target = Number(q.match(/(?:до|=)\s*(\d+(?:[.,]\d+)?)/)?.[1]?.replace(',', '.'));
+
+  let best = null;
+  for (const c of def.controls) {
+    if (c.action) continue;
+    const label = new Set([...stems(c.label), ...stems(KK_SIMS[c.label])]);
+    let score = [...label].filter((s) => asked.has(s)).length + (SYNONYMS[c.id]?.test(q) ? 1 : 0);
+    // Названо значение переключателя: «стекло», «масло», «выключить лампу»
+    const named = c.names?.findIndex((n) => [...stems(n), ...stems(KK_SIMS[n])].some((s) => asked.has(s))) ?? -1;
+    if (named >= 0) score += 2;
+    if (score > (best?.score ?? 0)) best = { c, score, named };
+  }
+  if (!best) return null;
+  const { c, named } = best;
+  if (named < 0 && !up && !down && !Number.isFinite(target)) return null;
+
+  // Действия (собрать цепь, включить лазер) считаем выполненными: иначе приборы показывают ноль
+  const base = { ...params };
+  for (const a of def.controls) if (a.action) base[a.id] = a.max;
+  // Опыт, который ещё не шёл по времени (нагрев, брожение), при нуле ничем не отличается — берём середину
+  for (const a of def.controls) if (TIME_IDS.includes(a.id) && a.id !== c.id && !base[a.id]) base[a.id] = a.max / 2;
+
+  const from = base[c.id];
+  let to;
+  if (named >= 0 && named !== from) to = named;
+  else if (c.names) to = from + (down ? -1 : 1);
+  else if (Number.isFinite(target)) to = target;
+  else if (Number.isFinite(factor) && factor > 0) to = down ? from / factor : from * factor;
+  else to = from + ((c.max - c.min) / 4) * (down ? -1 : 1);
+  to = Math.min(c.max, Math.max(c.min, Math.round(to / c.step) * c.step));
+  to = Number(to.toFixed(4));
+
+  const value = (v) => (c.names ? tr(c.names[v]) : `${String(v).replace('.', ',')} ${c.unit}`.trim());
+  if (to === from) return t('off.simLimit', { label: tr(c.label), value: value(from) });
+
+  const after = { ...base, [c.id]: to };
+  const before = def.readings(base);
+  const changed = def.readings(after)
+    .map((r, i) => (before[i] && before[i].value !== r.value ? `${tr(r.label)}: ${before[i].value} → ${r.value}` : null))
+    .filter(Boolean);
+  return [
+    t('off.simIf', { label: tr(c.label), from: value(from), to: value(to) }),
+    changed.length ? `${changed.join('; ')}.` : t('off.simSame'),
+    t('off.tryIt'),
+  ].join(' ');
+}
+
+// ---------- Поиск по частым вопросам ----------
+// Совпадение считаем по корням слов (как косинус по множествам), а не по точной фразе:
+// «зачем реостат» и «для чего в цепи нужен реостат» должны найти один и тот же ответ.
+
+// Вопросительные и служебные слова есть почти в каждом вопросе и ничего не различают
+const STOP = new Set(stems('почему зачем какой какая какие каких сколько такое будет если нужно можно этот этой этого тоже очень когда откуда чтобы неге деген қалай қандай үшін болады керек және бұл осы'));
+
+const FAQ_INDEX = OFFLINE_FAQ.map((entry) => ({
+  entry,
+  variants: [...entry.q, ...entry.qk].map((v) => new Set(stems(v).filter((s) => !STOP.has(s)))),
+}));
+
+const FAQ_THRESHOLD = 0.5;
+
+function searchFaq(question, facts, lang) {
+  const asked = new Set(stems(question).filter((s) => !STOP.has(s)));
+  if (!asked.size) return null;
+  const here = facts.sim?.def.id ?? facts.lessonId;
+  const opened = Boolean(facts.sim || facts.bench);
+  const subject = facts.subject ?? (facts.bench ? 'chemistry' : null);
+  let best = null;
+  for (const { entry, variants } of FAQ_INDEX) {
+    // В открытом опыте ответы других опытов не годятся: «почему выделяется газ» в работе
+    // про металлы — не про мел. По всей базе ищем, только когда опыт не открыт
+    if (opened && ![here, subject, 'general'].includes(entry.scope)) continue;
+    // Вопросы открытого опыта и его предмета важнее: «почему период…» в маятнике — про маятник
+    const bonus = entry.scope === here ? 0.15 : entry.scope === subject ? 0.05 : 0;
+    for (const v of variants) {
+      if (!v.size) continue;
+      const common = [...v].filter((s) => asked.has(s)).length;
+      // Одного общего корня мало: «расскажи» и «расстояние» совпадают по первым буквам.
+      // Исключение — короткие вопросы вроде «что такое осмос», где значимое слово одно
+      if (common < Math.min(2, v.size, asked.size)) continue;
+      const score = common / Math.sqrt(v.size * asked.size) + bonus;
+      if (score > (best?.score ?? 0)) best = { entry, score };
+    }
+  }
+  if (!best || best.score < FAQ_THRESHOLD) return null;
+  return lang === 'kk' ? best.entry.ak : best.entry.a;
 }
