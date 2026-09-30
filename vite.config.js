@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 // С запасом на работу из конструктора, которую клиент присылает для опроса (до 20 000 байт JSON)
 const MAX_BODY_BYTES = 40_000;
@@ -48,5 +49,38 @@ export default defineConfig(({ mode }) => {
   for (const name of ['GEMINI_API_KEY', 'GEMINI_MODEL', 'ANTHROPIC_API_KEY']) {
     if (env[name] && !process.env[name]) process.env[name] = env[name];
   }
-  return { plugins: [localApi()] };
+  return { plugins: [localApi(), offline()] };
 });
+
+// Офлайн-режим: сайт и все работы кэшируются при первом заходе, дальше открываются без сети.
+// Опыты считаются в браузере, так что без интернета не работают только ИИ и Supabase.
+function offline() {
+  return VitePWA({
+    // Новая версия ставится тихо и включается при следующем открытии.
+    // Перезагружать страницу посреди опыта нельзя: ученик потеряет прогресс.
+    registerType: 'autoUpdate',
+    includeAssets: ['favicon.png', 'icons/apple-touch-icon.png'],
+    manifest: {
+      name: 'Shoqan — виртуальная STEM-лаборатория',
+      short_name: 'Shoqan',
+      description: 'Опыты по химии, физике и биологии без оборудования',
+      lang: 'ru',
+      start_url: '/',
+      display: 'standalone',
+      background_color: '#ffffff',
+      theme_color: '#1a5cff',
+      icons: [
+        { src: '/icons/app-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/app-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/icons/app-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    },
+    workbox: {
+      globPatterns: ['**/*.{js,css,html,woff2,webp,png,svg}'],
+      navigateFallback: '/index.html',
+      // Запросы к ИИ всегда идут в сеть: старый закэшированный ответ про чужой опыт хуже, чем честная ошибка.
+      navigateFallbackDenylist: [/^\/api\//],
+      cleanupOutdatedCaches: true,
+    },
+  });
+}
