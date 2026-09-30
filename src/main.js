@@ -1544,6 +1544,20 @@ updateRoleFields();
 showHover(null);
 boot();
 
+// ---------- Во весь экран ----------
+
+// На телефоне опыт можно открыть без панелей браузера. iPhone это не разрешает сайтам
+// (там полный экран даёт иконка на главном экране), поэтому кнопка есть, только где API работает.
+if (document.fullscreenEnabled && matchMedia('(pointer: coarse)').matches) {
+  const btn = $('fullscreenBtn');
+  btn.hidden = false;
+  btn.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => toast(t('work.fullscreenFail')));
+  });
+  document.addEventListener('fullscreenchange', () => btn.setAttribute('aria-pressed', String(Boolean(document.fullscreenElement))));
+}
+
 // ---------- Офлайн ----------
 
 // На телефоне кэш качается в фоне несколько секунд. Без сообщения ученик не знает,

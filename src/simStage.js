@@ -64,6 +64,8 @@ export function createSimStage({ canvasBox, controlsBox, readoutBox, chartBox, c
     }
 
     const view = def.create(canvasBox, params, set);
+    // Экранный диктор называет сцену по названию опыта, а не «изображение»
+    canvasBox.querySelector('svg')?.setAttribute('aria-label', tr(def.title));
 
     controlsBox.replaceChildren(...def.controls.filter((c) => !c.action).map((c) => {
       const row = el('label', 'control');

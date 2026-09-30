@@ -40,7 +40,7 @@
 
 
   <!-- ---------- Вход и регистрация ---------- -->
-  <section id="auth" class="auth" hidden>
+  <section id="auth" role="main" class="auth" hidden>
     <div class="glow" aria-hidden="true"></div>
     <div class="hero-text">
       <div class="hero-head">
@@ -211,7 +211,7 @@
   </div>
 
   <!-- ---------- Личный кабинет ---------- -->
-  <section id="menu" class="dash" aria-labelledby="menuTitle" hidden>
+  <section id="menu" role="main" class="dash" aria-labelledby="menuTitle" hidden>
     <h1 id="menuTitle" class="greeting"><span id="greetWord"></span>, <span id="greetName" class="grad-text"></span></h1>
 
     <div id="onboarding" class="onboarding" hidden>
@@ -240,7 +240,7 @@
   </section>
 
   <!-- ---------- Учитель: результаты класса ---------- -->
-  <section id="teacher" class="dash teacher" aria-labelledby="teacherTitle" hidden>
+  <section id="teacher" role="main" class="dash teacher" aria-labelledby="teacherTitle" hidden>
     <div class="teacher-head">
       <h1 id="teacherTitle" data-i18n="teacher.title">Мои классы</h1>
       <form id="newClassForm" class="inline-form">
@@ -287,7 +287,7 @@
   </section>
 
   <!-- ---------- Аккаунт ученика ---------- -->
-  <section id="account" class="dash account" aria-labelledby="profileName" hidden>
+  <section id="account" role="main" class="dash account" aria-labelledby="profileName" hidden>
     <div class="card profile-card">
       <span id="profileAvatar" class="avatar profile-avatar" aria-hidden="true"></span>
       <div class="profile-info">
@@ -350,6 +350,7 @@
     <div class="work-bar">
       <button id="backBtn" type="button" class="ghost small" data-i18n="work.back">← Назад</button>
       <h1 id="workTitle" class="work-title"></h1>
+      <button id="fullscreenBtn" type="button" class="ghost small fullscreen-btn" aria-pressed="false" title="Во весь экран" aria-label="Во весь экран" data-i18n-attr="title:work.fullscreen;aria-label:work.fullscreen" hidden>⛶</button>
     </div>
 
     <div class="focus-grid">

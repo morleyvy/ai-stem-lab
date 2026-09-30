@@ -1890,3 +1890,114 @@ button.lv-hint-close { padding: 0; width: 32px; height: 32px; min-height: 32px; 
   .cn-actions > button, .cn-save button { flex: 1 1 100%; }
   .cn-save, .cn-save label { flex: 1 1 100%; }
 }
+
+/* ---------- Телефон: опыт во весь экран ----------
+   Сцена во всю ширину прилипает к верху, под ней прокручиваются текущий шаг, реактивы и регуляторы.
+   Раньше сцена и шаг не помещались на экран вместе, и ученик всё время листал между ними.
+   Карточки-обёртки растворяются (display: contents), чтобы сцена прилипала на всю высоту страницы,
+   а не только в пределах своей карточки, и чтобы блоки можно было переставить через order. */
+@media (max-width: 720px) {
+  body.focus { --bar-h: calc(52px + env(safe-area-inset-top, 0px)); background: #fff; }
+  body.focus .top { display: none; }
+  body.focus .workspace { display: flex; flex-direction: column; gap: 12px; padding: 0 0 calc(96px + env(safe-area-inset-bottom, 0px)); }
+  body.focus .focus-grid,
+  body.focus .focus-grid > .stage,
+  body.focus .focus-side,
+  body.focus .lab-card:not([hidden]),
+  body.focus .sim-card:not([hidden]) { display: contents; }
+
+  body.focus .work-bar {
+    order: 0;
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    height: var(--bar-h);
+    margin: 0;
+    padding: env(safe-area-inset-top, 0px) 8px 0;
+    gap: 6px;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+  }
+  body.focus .work-bar .work-title { flex: 1; min-width: 0; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.focus #backBtn { min-height: 44px; padding-inline: 12px; }
+  body.focus .fullscreen-btn { min-width: 44px; min-height: 44px; font-size: 1.2rem; }
+
+  body.focus .lab,
+  body.focus .sim-canvas-box {
+    order: 1;
+    position: sticky;
+    top: var(--bar-h);
+    z-index: 11;
+    width: 100%;
+    margin: 0;
+    aspect-ratio: 16 / 9;
+    height: auto;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 6px 12px -8px rgba(15, 23, 42, 0.18);
+  }
+
+  body.focus #lessonSide,
+  body.focus #sandboxSide { order: 2; margin-inline: 12px; }
+  body.focus #lessonSide { padding: 16px; }
+  /* Под шагом — то, чем опыт делают: регуляторы и реактивы; длинная подсказка к сцене ниже */
+  body.focus .lab-card .lab-bar { order: 3; padding: 0 12px; }
+  body.focus #reagentBar { order: 3; margin-inline: 12px; }
+  body.focus .scene-hint { order: 4; margin: 0 16px; }
+  body.focus .sim-panel { order: 3; position: static; margin-inline: 12px; padding: 0; border: 0; background: none; backdrop-filter: none; }
+  body.focus #simSide { order: 5; margin-inline: 12px; }
+  body.focus .drawers { order: 6; margin: 0 12px; }
+
+  /* Гипотеза в свободной лаборатории — лист снизу экрана, а не окно поверх маленькой сцены */
+  body.focus .predict { position: fixed; inset: auto 0 0; z-index: 30; padding: 0; background: none; backdrop-filter: none; }
+  body.focus .predict-box { max-width: none; border-radius: 22px 22px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Облачко «Вопрос по опыту…» закрывало инструкцию; пульс кнопки и так подсказывает, что Шоқан рядом */
+  body.focus .chat-hint { display: none; }
+}
+
+/* Телефон, повёрнутый горизонтально: сцена слева на всю высоту, шаг и регуляторы справа */
+@media (max-height: 500px) and (orientation: landscape) {
+  body.focus .top { display: none; }
+  body.focus .workspace { padding: 0 max(8px, env(safe-area-inset-right, 0px)) 0 max(8px, env(safe-area-inset-left, 0px)); }
+  body.focus .work-bar { margin: 0; height: 44px; }
+  body.focus .work-bar .work-title { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  body.focus .focus-grid { grid-template-columns: minmax(0, 1fr) minmax(240px, 38%); gap: 10px; }
+  body.focus .lab,
+  body.focus .sim-canvas-box { width: auto; height: calc(100dvh - 56px); aspect-ratio: 16 / 9; max-width: 100%; margin: 0 auto; }
+  body.focus .focus-grid > .stage { position: sticky; top: 0; }
+  body.focus .focus-side { position: static; }
+  body.focus .chat-hint { display: none; }
+}
+
+/* ---------- Сенсорные экраны: крупные цели для пальца ---------- */
+@media (pointer: coarse) {
+  .reagent { min-height: 44px; }
+  input[type='range'] { height: 32px; }
+  input[type='range']::-webkit-slider-thumb { width: 26px; height: 26px; }
+  input[type='range']::-moz-range-thumb { width: 26px; height: 26px; }
+  /* Safari увеличивает страницу при фокусе на поле со шрифтом меньше 16px */
+  input, textarea, select, .chat-input { font-size: max(16px, 1em); }
+}
+
+/* ---------- Телефон: шапка и главная ----------
+   Шапка раньше разваливалась на две неровные строки с пустотами. Теперь: логотип и кнопки
+   в одну строку, предметы — во всю ширину второй строки, по три равные вкладки. */
+@media (max-width: 720px) {
+  .top { display: grid; grid-template-columns: auto 1fr auto auto auto; align-items: center; column-gap: 6px; row-gap: 8px; padding: 8px 10px; }
+  .top .brand-text { display: none; }
+  .top .logo { width: 38px; height: 38px; }
+  .top-nav:not([hidden]) { grid-column: 1 / -1; grid-row: 2; display: flex; margin: 0; }
+  .nav-tab { flex: 1; justify-content: center; padding: 8px 6px; min-height: 40px; }
+  .font-btn { justify-self: end; }
+  .user-box { gap: 4px; }
+  #logoutBtn { padding-inline: 10px; }
+  .greeting { font-size: 2rem; margin-bottom: 20px; }
+  /* Уведомление снизу, над кнопкой Шоқана: сверху оно закрывало шапку */
+  .toast { top: auto; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); border-radius: 16px; font-size: 0.88rem; padding: 10px 16px; width: max-content; }
+}
+
+/* Горизонтальный телефон: кнопка Шоқана меньше, чтобы не закрывала шаг справа */
+@media (max-height: 500px) and (orientation: landscape) {
+  .chat { --chat-fab: 52px; }
+}

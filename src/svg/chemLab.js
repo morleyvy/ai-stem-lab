@@ -40,6 +40,8 @@ export function createChemLab(container, { onPick, onHover } = {}) {
   const scene = createScene(container, {
     build(svg, d) {
       defs = d;
+      // Экранный диктор называет сцену, а не просто «изображение»
+      svg.setAttribute('aria-label', tr('Лабораторный стол'));
       roomLayer = s('g');
       rigLayer = s('g');
       svg.append(roomLayer);
