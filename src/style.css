@@ -1423,12 +1423,6 @@ body:has(> .chat:not([hidden])) { padding-bottom: calc(96px + env(safe-area-inse
   .lang-switch button { padding: 4px 6px; }
 }
 
-/* На телефоне переключатель языка не помещался рядом с «A+» и профилем — шапка разрасталась
-   во вторую строку. Название рядом с логотипом прячем, когда показан профиль: логотип остаётся
-   ссылкой на главную, а её доступное имя задаёт aria-label кнопки. */
-@media (max-width: 480px) {
-  .top:has(.user-box:not([hidden])) .brand-text { display: none; }
-}
 
 /* ---------- Лендинг под экраном входа ---------- */
 
@@ -1919,8 +1913,11 @@ button.lv-hint-close { padding: 0; width: 32px; height: 32px; min-height: 32px; 
     border-bottom: 1px solid var(--line);
   }
   body.focus .work-bar .work-title { flex: 1; min-width: 0; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  body.focus #backBtn { min-height: 44px; padding-inline: 12px; }
-  body.focus .fullscreen-btn { min-width: 44px; min-height: 44px; font-size: 1.2rem; }
+  /* Только стрелка: место отдаём названию работы. Текст «← Назад» остаётся именем кнопки для диктора */
+  body.focus #backBtn { min-width: 44px; min-height: 44px; padding: 0; font-size: 0; }
+  body.focus #backBtn::before { content: '←'; font-size: 1.35rem; line-height: 1; }
+  body.focus .fullscreen-btn,
+  body.focus .font-btn-work { min-width: 44px; min-height: 44px; padding-inline: 8px; }
 
   body.focus .lab,
   body.focus .sim-canvas-box {
@@ -1985,7 +1982,6 @@ button.lv-hint-close { padding: 0; width: 32px; height: 32px; min-height: 32px; 
    в одну строку, предметы — во всю ширину второй строки, по три равные вкладки. */
 @media (max-width: 720px) {
   .top { display: grid; grid-template-columns: auto 1fr auto auto auto; align-items: center; column-gap: 6px; row-gap: 8px; padding: 8px 10px; }
-  .top .brand-text { display: none; }
   .top .logo { width: 38px; height: 38px; }
   .top-nav:not([hidden]) { grid-column: 1 / -1; grid-row: 2; display: flex; margin: 0; }
   .nav-tab { flex: 1; justify-content: center; padding: 8px 6px; min-height: 40px; }
@@ -2000,4 +1996,122 @@ button.lv-hint-close { padding: 0; width: 32px; height: 32px; min-height: 32px; 
 /* Горизонтальный телефон: кнопка Шоқана меньше, чтобы не закрывала шаг справа */
 @media (max-height: 500px) and (orientation: landscape) {
   .chat { --chat-fab: 52px; }
+}
+
+/* ---------- Спокойная шапка ----------
+   Капсула со стеклом, градиентной рамкой и тенью перегружала экран. Теперь это плоская белая
+   полоса с тонкой линией снизу; подпись под логотипом и имя у аватара убраны (гость и так видит
+   баннер «Демо-режим»). */
+.top {
+  max-width: none;
+  margin: 0;
+  top: 0;
+  padding: 10px max(24px, calc((100% - 1180px) / 2));
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+.top .brand-sub,
+.top .user-name { display: none; }
+.top .logo { width: 36px; height: 36px; filter: none; }
+.brand-name { background: none; color: #1e3a8a; }
+.avatar { width: 36px; height: 36px; font-size: 0.9rem; background: #1a5cff; }
+.top-nav { background: var(--soft); box-shadow: none; }
+#logoutBtn { background: none; border-color: transparent; box-shadow: none; color: var(--muted); }
+#logoutBtn:hover { color: var(--text); }
+
+/* Уведомления — снизу по центру, над кнопкой Шоқана: сверху они закрывали строку опыта */
+.toast { top: auto; bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+
+/* ---------- Опыт: только сцена и шаг ----------
+   В опыте шапки сайта нет совсем — одна строка «← Назад · название» и две кнопки справа.
+   Языка здесь нет намеренно: смена языка перезагружает страницу, и незаконченный опыт пропал бы. */
+body.focus .top { display: none; }
+.crumb-short { display: none; }
+@media (max-width: 720px) {
+  .crumb-full { display: none; }
+  .crumb-short { display: inline; }
+}
+.font-btn-work, .fullscreen-btn { flex: none; min-width: 40px; display: inline-grid; place-items: center; }
+.fullscreen-btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
+.font-btn-work[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
+body.focus .chat-hint { display: none; }
+
+@media (min-width: 721px) {
+  body.focus .workspace { padding-top: 0; }
+  body.focus .work-bar {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    margin: 0 0 14px;
+    padding: 10px 0;
+    background: #f6f8fc;
+    border-bottom: 1px solid var(--line);
+  }
+  body.focus .work-bar .work-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.focus .focus-side { top: 76px; }
+  /* Место от шапки отдаём сцене: она растёт, пока вместе с полосой нагрева помещается в экран */
+  body.focus .lab { width: min(100%, max(520px, calc((100vh - 250px) * 16 / 9))); }
+  body.focus .sim-canvas-box { width: min(100%, max(520px, calc((100vh - 330px) * 16 / 9))); margin-inline: auto; }
+}
+
+/* ---------- Телефон: шапка как у приложения ----------
+   Одна строка: логотип слева, язык «RU ⌄» и меню ☰ справа. Аккаунт, крупный текст и выход — в меню,
+   предметы — строкой под шапкой (main.js переносит #topNav). На компьютере всего этого нет. */
+.lang-select,
+.menu-btn,
+.site-menu { display: none; }
+@media (max-width: 720px) {
+  .top { display: flex; padding: 8px 12px; gap: 8px; min-height: 56px; }
+  .top .brand-text { display: flex; justify-content: center; }
+  .top .font-btn,
+  .top .lang-switch,
+  .top .user-box { display: none; }
+  .top #offlineBadge { margin-left: auto; }
+  .lang-select {
+    display: block;
+    margin-left: auto;
+    min-height: 44px;
+    padding: 0 26px 0 10px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center;
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+  }
+  #offlineBadge:not([hidden]) + .lang-select { margin-left: 0; }
+  .menu-btn { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px; background: none; box-shadow: none; color: var(--text); }
+  .menu-btn[aria-expanded='true'] { background: var(--soft); }
+  .site-menu:not([hidden]) {
+    display: grid;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 8px;
+    left: 8px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  }
+  .site-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 8px 14px; border: 0; border-radius: 12px; background: none; box-shadow: none; text-align: left; font-size: 1rem; color: var(--text); }
+  .site-menu-item:hover { background: var(--soft); }
+  .site-menu-user { justify-content: flex-start; border-bottom: 1px solid var(--line); border-radius: 12px 12px 0 0; }
+  .site-menu-user > span:last-child { display: grid; }
+  .site-menu-name { font-weight: 600; }
+  .site-menu-sub { color: var(--muted); font-size: 0.85rem; }
+  .site-menu-check { color: var(--muted); font-weight: 600; }
+  #menuFont[aria-pressed='true'] .site-menu-check { color: var(--accent); }
+  #menuLogout { color: var(--bad); }
+  /* Предметы — своя строка под шапкой, прокручивается вместе со страницей */
+  .top-nav:not([hidden]) { display: flex; margin: 12px 12px 0; }
 }

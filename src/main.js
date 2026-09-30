@@ -98,10 +98,22 @@ const constructorUi = createConstructor({ show, getUser: () => user, openLesson,
 
 // ---------- Навигация ----------
 
+// На телефоне в строке опыта помещается слов пять: «Химия · Лабораторная работа…» съедало их все,
+// и название работы не было видно. Коротко — номер и название: «№ 1. Взаимодействие металлов…»
+function shortCrumb(crumb) {
+  const kind = crumb.split(' · ').slice(1).join(' · ');
+  const parts = kind.match(/^(.*?)[.:]\s+(.+)$/);
+  if (!parts) return crumb;
+  const number = parts[1].match(/№\s*\d+/)?.[0];
+  return number ? `${number}. ${parts[2]}` : parts[2];
+}
+
 function show(next, crumb = '') {
   screen = next;
   for (const id of SCREENS) $(id).hidden = id !== next;
-  $('workTitle').textContent = crumb;
+  const full = el('span', 'crumb-full', crumb);
+  const short = el('span', 'crumb-short', shortCrumb(crumb));
+  $('workTitle').replaceChildren(full, short);
   $('userBox').hidden = next === 'auth';
   // Лендинг — продолжение экрана входа, после входа он не нужен
   $('landing').hidden = next !== 'auth';
@@ -1399,14 +1411,15 @@ function renderReagentBar(ids) {
 const FONT_KEY = 'ai-stem-lab:large-text';
 function setLargeText(on) {
   document.documentElement.classList.toggle('large-text', on);
-  $('fontBtn').setAttribute('aria-pressed', String(on));
+  // Кнопка есть и в шапке, и в строке опыта (там шапки нет) — состояние у обеих общее
+  for (const id of ['fontBtn', 'fontBtnWork']) $(id).setAttribute('aria-pressed', String(on));
   try {
     localStorage.setItem(FONT_KEY, on ? '1' : '');
   } catch {
     // Настройка просто не запомнится.
   }
 }
-$('fontBtn').addEventListener('click', () => setLargeText(!document.documentElement.classList.contains('large-text')));
+for (const id of ['fontBtn', 'fontBtnWork']) $(id).addEventListener('click', () => setLargeText(!document.documentElement.classList.contains('large-text')));
 try {
   setLargeText(localStorage.getItem(FONT_KEY) === '1');
 } catch {
@@ -1418,6 +1431,50 @@ for (const b of document.querySelectorAll('.lang-switch [data-lang]')) {
   b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
   b.addEventListener('click', () => setLang(b.dataset.lang));
 }
+$('langSelect').value = lang;
+$('langSelect').addEventListener('change', (e) => setLang(e.target.value));
+
+// ---------- Телефон: шапка как у приложения ----------
+// На узком экране в шапке только логотип, «RU ⌄» и меню ☰; аккаунт, крупный текст и выход — в меню.
+// Предметы переезжают из шапки в отдельную строку под ней: в одной строке с кнопками им тесно.
+const narrow = matchMedia('(max-width: 720px)');
+function placeTopNav() {
+  const nav = $('topNav');
+  if (narrow.matches) document.querySelector('header.top').after(nav);
+  else document.querySelector('header.top .brand').after(nav);
+}
+narrow.addEventListener('change', placeTopNav);
+placeTopNav();
+
+function setSiteMenu(open) {
+  $('siteMenu').hidden = !open;
+  $('menuBtn').setAttribute('aria-expanded', String(open));
+  if (!open) return;
+  // Меню отражает то же, что шапка на компьютере: нет аккаунта (экран входа) — нет и пунктов про него
+  const signedIn = !$('userBox').hidden;
+  $('menuAccount').hidden = !signedIn;
+  $('menuLogout').hidden = !signedIn;
+  $('menuAvatar').textContent = $('avatar').textContent;
+  $('menuName').textContent = $('userName').textContent;
+  $('menuFont').setAttribute('aria-pressed', String(document.documentElement.classList.contains('large-text')));
+  $('siteMenu').querySelector('.site-menu-item:not([hidden])')?.focus();
+}
+$('menuBtn').addEventListener('click', () => setSiteMenu($('siteMenu').hidden));
+$('menuAccount').addEventListener('click', () => { setSiteMenu(false); $('accountBtn').click(); });
+$('menuLogout').addEventListener('click', () => { setSiteMenu(false); $('logoutBtn').click(); });
+$('menuFont').addEventListener('click', () => {
+  setLargeText(!document.documentElement.classList.contains('large-text'));
+  $('menuFont').setAttribute('aria-pressed', String(document.documentElement.classList.contains('large-text')));
+});
+document.addEventListener('click', (e) => {
+  if (!$('siteMenu').hidden && !e.target.closest('#siteMenu, #menuBtn')) setSiteMenu(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('siteMenu').hidden) {
+    setSiteMenu(false);
+    $('menuBtn').focus();
+  }
+});
 
 // Клавиатура в лабораторной работе: Enter — «Далее» или действие шага, 1–4 — вариант ответа
 document.addEventListener('keydown', (e) => {
@@ -1546,9 +1603,10 @@ boot();
 
 // ---------- Во весь экран ----------
 
-// На телефоне опыт можно открыть без панелей браузера. iPhone это не разрешает сайтам
-// (там полный экран даёт иконка на главном экране), поэтому кнопка есть, только где API работает.
-if (document.fullscreenEnabled && matchMedia('(pointer: coarse)').matches) {
+// Опыт можно открыть без панелей браузера и системы — на телефоне и на компьютере.
+// iPhone это не разрешает сайтам (там полный экран даёт иконка на главном экране),
+// поэтому кнопка есть, только где API работает.
+if (document.fullscreenEnabled) {
   const btn = $('fullscreenBtn');
   btn.hidden = false;
   btn.addEventListener('click', () => {
