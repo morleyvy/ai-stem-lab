@@ -1343,6 +1343,7 @@ body:has(> .chat:not([hidden])) { padding-bottom: calc(96px + env(safe-area-inse
 .chat-msg { max-width: 82%; padding: 10px 14px; border-radius: 18px; font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-row.assistant .chat-msg { background: #f1f5fb; color: var(--text); border-bottom-left-radius: 6px; }
 .chat-row.user .chat-msg { background: var(--chat-ink); color: #fff; border-bottom-right-radius: 6px; }
+.chat-note { display: block; margin-top: 6px; font-size: 0.78rem; color: var(--muted); }
 .chat-row.assistant .chat-msg.error { background: var(--warn-soft); color: var(--warn); }
 .chat-dots { display: inline-flex; gap: 4px; padding: 5px 2px; }
 .chat-dots span { width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; animation: chat-dot 1.2s ease-in-out infinite; }

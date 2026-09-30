@@ -51,7 +51,7 @@ function suggestionsFor(ctx) {
   return [first, t('chat.readings'), formula];
 }
 
-export function initChat({ postJson, getContext, screens }) {
+export function initChat({ postJson, getContext, screens, answerOffline }) {
   // Переписка живёт только в памяти страницы: после перезагрузки начинается заново.
   const history = [];
   let pending = false;
@@ -219,13 +219,21 @@ export function initChat({ postJson, getContext, screens }) {
     dots.append(el('span'), el('span'), el('span'));
     typing.lastChild.append(el('span', 'sr-only', t('chat.typing')), dots);
 
-    const res = await postJson('/api/chat', { question, history: history.slice(-HISTORY_TURNS), context: getContext() ?? {} });
+    // Без сети не ждём таймаута запроса: на телефоне в авиарежиме он может висеть долго
+    const res = navigator.onLine
+      ? await postJson('/api/chat', { question, history: history.slice(-HISTORY_TURNS), context: getContext() ?? {} })
+      : { ok: false, status: 0, data: {} };
     typing.remove();
     const text = res.ok && typeof res.data.text === 'string' ? res.data.text.trim() : '';
     if (text) {
       addMessage('assistant', text);
       // В историю попадают только удачные обмены: сбой не должен сбивать следующий ответ.
       history.push({ role: 'user', text: question }, { role: 'assistant', text });
+    } else if (res.status === 0 || res.status >= 429) {
+      // Нет сети, лимит или ИИ упал — отвечаем из проверенной базы. В историю для ИИ это не идёт:
+      // заготовленный ответ не должен выглядеть для модели как её собственная реплика.
+      const row = addMessage('assistant', answerOffline(question));
+      row.lastChild.append(el('span', 'chat-note', t('chat.offlineNote')));
     } else {
       addMessage('assistant', t('chat.fallback'), 'error');
     }

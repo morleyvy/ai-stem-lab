@@ -15,6 +15,7 @@ import { lineIcon, topicIcon } from './lineIcons.js';
 import * as account from './account.js';
 import { ON_TIME_XP, REPEAT_XP, assignmentStatus, attemptXp, computeProgress, titleOf } from './progress.js';
 import { initChat } from './chat.js';
+import { answerOffline } from './offlineChat.js';
 import { createLive } from './live.js';
 import { createConstructor } from './constructor.js';
 import { PREVIEW_ID } from './customLesson.js';
@@ -1360,7 +1361,19 @@ function chatContext() {
   // Химия: работа или свободная лаборатория — ассистенту важно, что уже в стакане и как нагрето
   return { subject: currentSubject, lessonId, sandbox: mode === 'sandbox', bench: { contents: [...bench.state.contents], temperature: bench.state.temperature } };
 }
-const chat = initChat({ postJson, getContext: chatContext, screens: SCREENS.filter((id) => id !== 'auth') });
+// Для ответов без интернета: те же данные, что уходят ИИ, но целиком — ответ собирается в браузере
+function offlineChatFacts() {
+  if (screen !== 'workspace') return {};
+  if (simCtrl) return { sim: { def: simCtrl.def, params: { ...simCtrl.params } } };
+  if (mode === 'mission') return { mission: true };
+  return { bench: true, result: bench.state.result };
+}
+const chat = initChat({
+  postJson,
+  getContext: chatContext,
+  screens: SCREENS.filter((id) => id !== 'auth'),
+  answerOffline: (question) => answerOffline(question, offlineChatFacts(), { t, tr }),
+});
 
 // Те же реактивы, что на 3D-столе, но кнопками: для клавиатуры, экранных дикторов и слабых компьютеров.
 function renderReagentBar(ids) {
