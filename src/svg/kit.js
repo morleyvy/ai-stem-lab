@@ -41,6 +41,31 @@ const id = (p) => `${p}${++uid}`;
 // гасим до еле заметных, а сами опыты — пузыри, стрелки, уровни — идут как обычно.
 export const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// ---------- Запись в SVG без лишней перерисовки ----------
+// Сцены в каждом кадре заново пишут атрибуты и текст табло, даже когда ничего не изменилось
+// (маятник висит, секундомер стоит). Браузер на каждую запись перерисовывает сцену: на телефоне
+// это занимало ~80% процессора в простое. Одинаковое значение пропускаем — для сцен это ничего
+// не меняет, а нагрузка в простое падает в 3–4 раза. Только SVG: остальной DOM не трогаем.
+if (typeof SVGElement === 'function' && !SVGElement.prototype.__skipSameWrites) {
+  const setAttr = Element.prototype.setAttribute;
+  const text = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
+  Object.defineProperties(SVGElement.prototype, {
+    __skipSameWrites: { value: true },
+    setAttribute: {
+      configurable: true,
+      writable: true,
+      value(name, value) {
+        if (this.getAttribute(name) !== String(value)) setAttr.call(this, name, value);
+      },
+    },
+    textContent: {
+      configurable: true,
+      get() { return text.get.call(this); },
+      set(value) { if (text.get.call(this) !== String(value ?? '')) text.set.call(this, value); },
+    },
+  });
+}
+
 // ---------- Сцена ----------
 
 // Создаёт SVG-сцену в контейнере и цикл анимации. build(svg, defs) рисует оборудование,
@@ -55,6 +80,8 @@ export function createScene(container, { build, frame }) {
 
   let raf = 0;
   let last = performance.now();
+  // Небольшой запас (−2 мс): иначе на экране 60 Гц кадр то попадает, то нет, и выходит 20 кадров вместо 30
+  const minFrameMs = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 1000 / 30 - 2 : 0;
   // Первый кадр — сразу, не дожидаясь requestAnimationFrame: без него подвижные части стоят
   // в (0, 0), и превью-снимок сцены (фоновая вкладка, медленная машина) выходит сломанным.
   // Микрозадача, а не прямой вызов: frame() может ссылаться на то, что сцена объявляет
@@ -62,12 +89,29 @@ export function createScene(container, { build, frame }) {
   let alive = true;
   queueMicrotask(() => { if (alive) frame?.(0, last / 1000); });
   const loop = (now) => {
+    raf = requestAnimationFrame(loop);
+    // Кадр сцены — это перерисовка всей большой SVG с градиентами. На телефоне 60 кадров в секунду
+    // занимали процессор почти целиком; 30 для пузырьков и маятника выглядят так же плавно
+    if (now - last < minFrameMs) return;
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
     frame?.(dt, now / 1000);
-    raf = requestAnimationFrame(loop);
   };
   raf = requestAnimationFrame(loop);
+
+  // Невидимая сцена не рисуется. Химический стол живёт всю сессию и раньше крутил цикл даже на экране
+  // физики; на телефоне это занимало процессор почти целиком и давало лаги. Скрытая через hidden
+  // или прокрученная за экран сцена для IntersectionObserver не пересекается с экраном.
+  const visibility = typeof IntersectionObserver === 'function' && new IntersectionObserver(([entry]) => {
+    if (!alive) return;
+    cancelAnimationFrame(raf);
+    raf = 0;
+    if (!entry.isIntersecting) return;
+    // После паузы не догоняем пропущенное время одним большим шагом
+    last = performance.now();
+    raf = requestAnimationFrame(loop);
+  });
+  visibility?.observe(svg);
 
   return {
     svg,
@@ -81,6 +125,7 @@ export function createScene(container, { build, frame }) {
     destroy() {
       alive = false;
       cancelAnimationFrame(raf);
+      visibility?.disconnect();
       svg.remove();
     },
   };

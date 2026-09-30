@@ -1267,12 +1267,14 @@ body:has(> .chat:not([hidden])) { padding-bottom: calc(96px + env(safe-area-inse
   /* Без круглой подложки: только голова Шоқана на прозрачном фоне, объём даёт тень по контуру */
   background: none;
   box-shadow: none;
-  filter: drop-shadow(0 8px 14px rgba(18, 68, 214, 0.28));
-  transition: bottom 0.2s ease, transform 0.18s ease, filter 0.18s ease, opacity 0.18s ease;
+  transition: bottom 0.2s ease, transform 0.18s ease, opacity 0.18s ease;
 }
-.chat-fab-img { width: 100%; height: 100%; display: block; object-fit: contain; }
+/* Тень — на картинке, а не на кнопке: иначе пульсирующее кольцо внутри кнопки заставляло
+   пересчитывать drop-shadow в каждом кадре */
+.chat-fab-img { width: 100%; height: 100%; display: block; object-fit: contain; filter: drop-shadow(0 8px 14px rgba(18, 68, 214, 0.28)); transition: filter 0.18s ease; }
 .chat-avatar img, .chat-mini { object-fit: cover; transform: scale(1.16) translateY(-3%); }
-.chat-fab:hover { transform: translateY(-3px); background: none; border-color: transparent; filter: drop-shadow(0 12px 18px rgba(18, 68, 214, 0.34)); }
+.chat-fab:hover { transform: translateY(-3px); background: none; border-color: transparent; }
+.chat-fab:hover .chat-fab-img { filter: drop-shadow(0 12px 18px rgba(18, 68, 214, 0.34)); }
 .chat-fab:active { transform: translateY(-1px) scale(0.98); }
 .chat-fab:focus-visible { outline: 3px solid var(--chat-ink); outline-offset: 4px; }
 .chat.open .chat-fab { transform: scale(0.94); }
@@ -1603,13 +1605,16 @@ body:has(> .chat:not([hidden])) { padding-bottom: calc(96px + env(safe-area-inse
   position: absolute;
   inset: 6%;
   border-radius: 50%;
-  box-shadow: 0 0 0 0 rgba(26, 92, 255, 0.35);
+  border: 3px solid rgba(26, 92, 255, 0.35);
+  /* Волна — это масштаб и прозрачность кольца: их анимирует видеокарта. Анимация box-shadow
+     перерисовывала страницу в каждом кадре и на телефоне съедала треть процессора */
   animation: chat-ready 2.4s ease-out infinite;
+  will-change: transform, opacity;
   pointer-events: none;
 }
 @keyframes chat-ready {
-  0% { box-shadow: 0 0 0 0 rgba(26, 92, 255, 0.35); }
-  70%, 100% { box-shadow: 0 0 0 16px rgba(26, 92, 255, 0); }
+  0% { transform: scale(1); opacity: 1; }
+  70%, 100% { transform: scale(1.35); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .chat-fab.ready::after { animation: none; box-shadow: 0 0 0 3px rgba(26, 92, 255, 0.3); }
