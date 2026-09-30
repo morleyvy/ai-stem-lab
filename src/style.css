@@ -758,6 +758,7 @@ button:focus-visible, a:focus-visible { box-shadow: 0 0 0 6px rgba(26, 92, 255, 
 .skip-link:focus { top: 16px; }
 
 .font-btn { margin-left: auto; font-weight: 600; min-width: 44px; }
+.offline-badge { padding: 4px 12px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
 .user-box { margin-left: 12px; }
 
 /* Крупные «ручки» регуляторов — удобно пальцем и при слабой моторике */

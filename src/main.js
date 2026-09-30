@@ -19,6 +19,7 @@ import { createLive } from './live.js';
 import { createConstructor } from './constructor.js';
 import { PREVIEW_ID } from './customLesson.js';
 import { applyStaticI18n, lang, locale, plural, setLang, t, tr } from './i18n.js';
+import { registerSW } from 'virtual:pwa-register';
 
 // Разметку index.html переводим до первой отрисовки экранов
 applyStaticI18n();
@@ -1521,6 +1522,17 @@ async function boot() {
 updateRoleFields();
 showHover(null);
 boot();
+
+// ---------- Офлайн ----------
+
+// На телефоне кэш качается в фоне несколько секунд. Без сообщения ученик не знает,
+// когда можно выключать интернет, и думает, что офлайн-режим не работает.
+registerSW({ onOfflineReady: () => toast(t('net.ready')) });
+
+function syncOnline() { $('offlineBadge').hidden = navigator.onLine; }
+addEventListener('online', syncOnline);
+addEventListener('offline', syncOnline);
+syncOnline();
 
 // Только в режиме разработки: позволяет автотестам работать без мыши.
 if (import.meta.env.DEV) {
