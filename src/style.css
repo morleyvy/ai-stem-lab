@@ -2114,7 +2114,8 @@ body.focus .chat-hint { display: none; }
 }
 
 /* ---------- Аватар, название, достижения ---------- */
-.avatar { color: #fff; overflow: hidden; }
+/* Серый силуэт — как стандартная аватарка без фото: нейтрально и не спорит с синими кнопками */
+.avatar { color: #94a3b8; background: #e2e8f0; overflow: hidden; }
 .avatar svg { display: block; }
 .brand-name { font-size: 1rem; }
 @media (max-width: 720px) {
