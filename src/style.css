@@ -2110,7 +2110,9 @@ body.focus .chat-hint { display: none; }
   #menuFont[aria-pressed='true'] .site-menu-check { color: var(--accent); }
   #menuLogout { color: var(--bad); }
   /* Предметы — своя строка под шапкой, прокручивается вместе со страницей */
-  .top-nav:not([hidden]) { display: flex; margin: 12px 12px 0; }
+  /* width: auto — иначе width: 100% из правила выше плюс отступы выталкивали «Биологию» за край экрана */
+  .top-nav:not([hidden]) { display: flex; width: auto; margin: 12px 12px 0; }
+  .nav-tab { flex: 1 1 0; min-width: 0; gap: 6px; padding: 8px 4px; white-space: nowrap; }
 }
 
 /* ---------- Аватар, название, достижения ---------- */
@@ -2162,3 +2164,9 @@ body.focus .chat-hint { display: none; }
 /* Касание сцены — это опыт, а не прокрутка: иначе движение пальцем вверх прокручивало страницу
    и браузер отменял перетаскивание детали. Страница прокручивается за область под сценой */
 .sim-svg { touch-action: none; }
+
+/* Совсем узкий телефон (320–360 px): точки у предметов убираем, чтобы «Биология» помещалась целиком */
+@media (max-width: 360px) {
+  .nav-tab::before { display: none; }
+  .nav-tab { font-size: 0.9rem; }
+}
