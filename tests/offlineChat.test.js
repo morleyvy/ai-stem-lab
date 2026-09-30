@@ -1,7 +1,7 @@
 // Шоқан без интернета: ответы собираются из данных симуляций и движка реакций
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { answerOffline, detectIntent } from '../src/offlineChat.js';
+import { answerOffline, detectIntent, newMemory } from '../src/offlineChat.js';
 import { OHM } from '../src/sims/ohm.js';
 import { runExperiment } from '../src/engine.js';
 
@@ -58,4 +58,40 @@ test('вопросы про сайт отвечаются на любом экр
 
 test('без открытого опыта — честно говорим, что умеем без сети', () => {
   assert.equal(answerOffline('Кто такой Ньютон?', {}, i18n), '[off.noExperiment]');
+});
+
+const zincInAcid = () => runExperiment({ substances: ['acid_hcl', 'metal_zn'], temperature: 20, concentration: 'dilute' });
+
+test('вопрос из базы задаётся один раз, на ответ ученика объяснение не повторяется по кругу', () => {
+  const result = zincInAcid();
+  const memory = newMemory();
+  const first = answerOffline('Почему выделяется газ?', { bench: true, result }, i18n, memory);
+  assert.ok(first.includes(result.hint));
+  const second = answerOffline('Не знаю', { bench: true, result }, i18n, memory);
+  assert.equal(second, '[off.again]');
+  const third = answerOffline('Почему?', { bench: true, result }, i18n, memory);
+  assert.ok(!third.includes(result.hint));
+});
+
+test('ученик называет другое вещество — ответ считает движок', () => {
+  const result = zincInAcid();
+  const copper = runExperiment({ substances: ['acid_hcl', 'metal_cu'], temperature: 20, concentration: 'dilute' });
+  const text = answerOffline('С медью ничего не будет', { bench: true, result }, i18n);
+  assert.match(text, /\[off\.whatIf\]/);
+  assert.ok(text.includes(copper.why));
+  assert.ok(!text.includes(result.equation));
+  // Казахский: «мыс» — медь
+  assert.ok(answerOffline('Мыспен не болады?', { bench: true, result }, i18n).includes(copper.why));
+});
+
+test('магний вместо цинка: газ и своё уравнение', () => {
+  const text = answerOffline('А если взять магний?', { bench: true, result: zincInAcid() }, i18n);
+  assert.match(text, /Mg/);
+  assert.match(text, /H₂/);
+});
+
+test('симуляция: реплика после ответа — предложение проверить на опыте', () => {
+  const memory = newMemory();
+  answerOffline('Что показывают приборы?', { sim: ohm }, i18n, memory);
+  assert.equal(answerOffline('Понятно', { sim: ohm }, i18n, memory), '[off.tryIt]');
 });

@@ -15,7 +15,7 @@ import { lineIcon, topicIcon } from './lineIcons.js';
 import * as account from './account.js';
 import { ON_TIME_XP, REPEAT_XP, assignmentStatus, attemptXp, computeProgress, titleOf } from './progress.js';
 import { initChat } from './chat.js';
-import { answerOffline } from './offlineChat.js';
+import { answerOffline, newMemory } from './offlineChat.js';
 import { createLive } from './live.js';
 import { createConstructor } from './constructor.js';
 import { PREVIEW_ID } from './customLesson.js';
@@ -1372,8 +1372,16 @@ const chat = initChat({
   postJson,
   getContext: chatContext,
   screens: SCREENS.filter((id) => id !== 'auth'),
-  answerOffline: (question) => answerOffline(question, offlineChatFacts(), { t, tr }),
+  answerOffline: (question) => answerOffline(question, offlineChatFacts(), { t, tr }, offlineMemoryFor(chatContext())),
 });
+
+// Память офлайн-ответов своя у каждого опыта: в новом опыте Шоқан снова объясняет с начала
+let offlineMemory = { key: null, memory: newMemory() };
+function offlineMemoryFor(ctx) {
+  const key = ctx.simId ?? ctx.lessonId ?? (ctx.sandbox ? 'sandbox' : ctx.mission ? 'mission' : 'menu');
+  if (offlineMemory.key !== key) offlineMemory = { key, memory: newMemory() };
+  return offlineMemory.memory;
+}
 
 // Те же реактивы, что на 3D-столе, но кнопками: для клавиатуры, экранных дикторов и слабых компьютеров.
 function renderReagentBar(ids) {
