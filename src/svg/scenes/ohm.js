@@ -4,7 +4,7 @@
 // при замыкании у контактов проскакивает искра. Ток и заряды — только в собранной замкнутой цепи.
 // Надписи есть только на самих приборах (табло, шкалы) — поверх сцены текста нет.
 
-import { createScene, cylinderShade, dial, draggable, floorShadow, room, s, shade, text } from '../kit.js';
+import { createScene, cylinderShade, dial, draggable, floorShadow, room, s, shade, text, touchTarget } from '../kit.js';
 
 const BENCH_Y = 470;
 const CHARGES = 22;
@@ -194,8 +194,9 @@ export function ohmScene(container, params, set) {
       s('rect', { x: -32, y: -8, width: 66, height: 6, rx: 2, fill: d.lin([[0, '#fcd9a8'], [0.5, '#d97706'], [1, '#92400e']], 'v') }),
       s('rect', { x: 26, y: -22, width: 8, height: 16, rx: 3, fill: '#1f2937' }),
     ]);
-    // Невидимая зона над основанием, не поворачивается вместе с ножом — по ней удобно щёлкать
-    const toggle = s('rect', { x: -40, y: -46, width: 84, height: 44, fill: '#ffffff', 'fill-opacity': 0 });
+    // Невидимая зона на весь ключ с основанием, не поворачивается вместе с ножом. Раньше она была только
+    // над основанием — на телефоне это 34×18 px, и палец попадал в основание, а не в нож
+    const toggle = s('rect', { x: -50, y: -56, width: 104, height: 70, fill: '#ffffff', 'fill-opacity': 0 });
     toggle.style.cursor = 'pointer';
     // Щелчок по ножу установленного ключа переключает его; на столе нож просто тянет весь ключ
     toggle.addEventListener('pointerdown', (e) => {

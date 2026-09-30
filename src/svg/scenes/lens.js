@@ -5,7 +5,7 @@
 // В темноте виден световой конус от пламени к линзе и от линзы к экрану (рассеяние в дымке).
 // Когда предмет ближе фокуса, изображение мнимое — рисуется полупрозрачным на стороне свечи.
 
-import { createScene, draggable, floorShadow, room, s } from '../kit.js';
+import { createScene, draggable, floorShadow, room, s, touchTarget } from '../kit.js';
 
 const LENS_X = 480;
 const AXIS_Y = 260; // высота оптической оси над рельсом
@@ -115,6 +115,7 @@ export function lensScene(container, params, set, { imageDistance }) {
       // Щелчок по фитилю зажигает (или гасит) свечу; зона щелчка лежит поверх зоны перетаскивания
       const wickHit = s('circle', { cy: topY - 12, r: 16, fill: 'transparent' });
       wickHit.style.cursor = 'pointer';
+      touchTarget(wickHit);
       wickHit.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         set('lit', params.lit ? 0 : 1);

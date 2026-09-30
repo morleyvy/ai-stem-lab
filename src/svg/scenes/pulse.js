@@ -4,7 +4,7 @@
 // лежащей на кушетке (щелчок по руке), 15 секунд считаем удары, ЧСС = удары × 4.
 // До этого монитор в режиме ожидания и частоту не показывает.
 
-import { createScene, floorShadow, readout, s, shade, text, W, H } from '../kit.js';
+import { createScene, floorShadow, readout, s, shade, text, W, H, touchTarget } from '../kit.js';
 import { tr } from '../../i18n.js';
 
 const FLOOR = 420; // линия стыка стены и пола
@@ -230,6 +230,7 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
       ]);
       fingers = s('g', { opacity: 0 }, [fingerHand]);
       arm.append(target, ring, fingers);
+      touchTarget(arm);
       arm.addEventListener('click', startCount);
       svg.append(arm);
 

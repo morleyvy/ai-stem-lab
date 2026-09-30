@@ -3,7 +3,7 @@
 // маятник висит неподвижно (released = 0). Время колебаний ученик засекает сам:
 // верхняя кнопка секундомера — старт/стоп, боковая — сброс.
 
-import { createScene, draggable, floorShadow, room, s, shade, text } from '../kit.js';
+import { createScene, draggable, floorShadow, room, s, shade, text, touchTarget } from '../kit.js';
 
 const STAND_X = 230;
 const PIVOT = { x: 560, y: 96 };
@@ -144,6 +144,7 @@ export function pendulumScene(container, params, set, { period }) {
     ]);
     for (const [btn, fn] of [[crown, toggleWatch], [resetBtn, resetWatch]]) {
       btn.style.cursor = 'pointer';
+      touchTarget(btn);
       btn.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         fn();

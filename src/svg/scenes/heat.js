@@ -4,7 +4,7 @@
 // в вещество; жидкость можно перемешивать стеклянной палочкой. Цифровой термометр и таймер —
 // на приборной панели, без подписей поверх сцены. Кипение воды — бурное: много пузырей, пар клубами.
 
-import { beaker, bubblePool, createScene, cylinderShade, draggable, floorShadow, hotplate, mixHex, readout, room, s } from '../kit.js';
+import { beaker, bubblePool, createScene, cylinderShade, draggable, floorShadow, hotplate, mixHex, readout, room, s, touchTarget } from '../kit.js';
 import { tr } from '../../i18n.js';
 
 const HOT = { x: 400, y: 372, w: 220 };
@@ -41,6 +41,7 @@ export function heatScene(container, params, set, { temperature, substanceOf }) 
         s('rect', { x: sx - 15, y: sy - 6, width: 30, height: 36, fill: 'transparent' }), // увеличенная зона нажатия
       ]);
       toggle.style.cursor = 'pointer';
+      touchTarget(toggle);
       toggle.addEventListener('pointerdown', () => set('power', params.power ? 0 : 1));
       svg.append(toggle, lampGlow, lamp);
 

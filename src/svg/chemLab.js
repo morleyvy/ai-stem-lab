@@ -6,7 +6,7 @@
 
 import { SUBSTANCES } from '../data/substances.js';
 import { SHELF, SHELF_BY_ID } from '../data/shelf.js';
-import { bubblePool, createScene, INK, mixHex, room, s, shade, text } from './kit.js';
+import { bubblePool, createScene, INK, mixHex, room, s, shade, text, touchTarget } from './kit.js';
 import { buildRig } from './chem/rigs.js';
 import { createFx, foamLayer, splintNodes } from './chem/effects.js';
 import { tr } from '../i18n.js';
@@ -62,6 +62,7 @@ export function createChemLab(container, { onPick, onHover } = {}) {
         const g = s('g', { class: 'reagent-item' });
         const ring = s('ellipse', { cx: 0, cy: 2, rx: 38, ry: 9, fill: '#1a5cff', opacity: 0 });
         g.append(ring, drawItem(item, d));
+        touchTarget(g);
         g.addEventListener('click', () => !busy && onPick?.(item.id));
         g.addEventListener('pointerenter', () => !busy && onHover?.(item.id));
         g.addEventListener('pointerleave', () => onHover?.(null));
@@ -392,6 +393,7 @@ export function createChemLab(container, { onPick, onHover } = {}) {
 
     let moved = false;
     let start = null;
+    touchTarget(stick);
     stick.addEventListener('pointerdown', (e) => {
       if (busy || !st.conf || st.mode !== 'idle') return;
       e.preventDefault();

@@ -5,7 +5,7 @@
 // Сначала ученик наводит резкость винтом фокусировки: пока винт не в нужном положении,
 // изображение в окуляре размыто (feGaussianBlur).
 
-import { createScene, cylinderShade, floorShadow, readout, room, s } from '../kit.js';
+import { createScene, cylinderShade, floorShadow, readout, room, s, touchTarget } from '../kit.js';
 import { tr } from '../../i18n.js';
 
 const BENCH = 470;
@@ -249,6 +249,7 @@ export function osmosisScene(container, params, set, { massChange }) {
 
   // Винт: тянем вверх-вниз (поворот пропорционален ходу мыши) или щёлкаем по верхней/нижней половине
   function bindKnob(node) {
+    touchTarget(node);
     node.addEventListener('pointerdown', (e) => {
       node.setPointerCapture(e.pointerId);
       const y0 = scene.point(e).y;

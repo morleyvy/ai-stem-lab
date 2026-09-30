@@ -184,6 +184,8 @@ export function startLesson(lesson, { bench, lab, sim, coach, info, journal, toa
         el('div', 'step-label', t('lesson.do')),
         el('p', 'step-text', tr(step.text)),
         el('p', 'step-note', t('lesson.splintNote')),
+        // Кнопкой, а не только перетаскиванием: на телефоне сцена маленькая и лучинку пальцем не поймать
+        button(t('splint.button'), () => lab.splint(), 'primary'),
         button(t('lesson.skip'), () => { waiting = null; next(); }, 'ghost'),
       );
     } else if (step.type === 'hypothesis') {

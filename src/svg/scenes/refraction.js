@@ -4,7 +4,7 @@
 // В темноте луч виден по рассеянию на пылинках и дымке — как в настоящем кабинете с задёрнутыми
 // шторами. Углы отмечены дугами без подписей, значения — на табло приборов.
 
-import { createScene, draggable, floorShadow, readout, room, s } from '../kit.js';
+import { createScene, draggable, floorShadow, readout, room, s, touchTarget } from '../kit.js';
 import { tr } from '../../i18n.js';
 
 const DEG = Math.PI / 180;
@@ -126,6 +126,7 @@ export function refractionScene(container, params, set, { refractionAngle, MEDIA
       // Отдельная зона нажатия на кнопку — поверх зоны перетаскивания; нажатие не запускает перетаскивание
       const hit = s('circle', { cx: 0, cy: -31, r: 11, fill: 'transparent' });
       hit.style.cursor = 'pointer';
+      touchTarget(hit);
       hit.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         set('laser', params.laser ? 0 : 1);

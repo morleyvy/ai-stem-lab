@@ -1607,6 +1607,21 @@ updateRoleFields();
 showHover(null);
 boot();
 
+// ---------- Телефон: новый шаг всегда на виду ----------
+// Сцена прилипает к верху, а карточка шага прокручивается под ней. Если ученик ушёл вниз к реактивам
+// или регуляторам, новый шаг оказывался под сценой, и казалось, что ничего не произошло.
+// При смене шага подводим карточку под сцену — только если её сейчас не видно.
+new MutationObserver(() => {
+  if (!narrow.matches || screen !== 'workspace' || $('lessonSide').hidden) return;
+  const scene = (simCtrl ? $('simCanvas') : $('lab')).getBoundingClientRect();
+  const card = $('lessonSide').getBoundingClientRect();
+  const hiddenUnderScene = card.top < scene.bottom;
+  const belowScreen = card.top > innerHeight - 120;
+  if (!hiddenUnderScene && !belowScreen) return;
+  const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  scrollBy({ top: card.top - scene.bottom - 8, behavior: smooth ? 'smooth' : 'auto' });
+}).observe($('coach'), { childList: true });
+
 // ---------- Во весь экран ----------
 
 // Опыт можно открыть без панелей браузера и системы — на телефоне и на компьютере.

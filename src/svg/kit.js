@@ -524,8 +524,28 @@ export function bubblePool(parent, count, { color = '#ffffff' } = {}) {
   };
 }
 
+// Касание элемента сцены на телефоне: сцена шириной 390 px, и ключ цепи или фитиль — это 10–15 px.
+// На сенсорном экране добавляем вокруг невидимую зону попадания. Прокрутку по касанию выключает
+// .sim-svg { touch-action: none } в style.css: на отдельных элементах SVG браузеры её не учитывают.
+const COARSE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+export function touchTarget(node, pad = 30) {
+  if (!COARSE || node.tagName !== 'g') return;
+  // Размер известен только после отрисовки; скрытая сцена (размер 0) остаётся как есть
+  requestAnimationFrame(() => {
+    let b;
+    try {
+      b = node.getBBox();
+    } catch {
+      return;
+    }
+    if (!b.width && !b.height) return;
+    node.prepend(s('rect', { x: b.x - pad, y: b.y - pad, width: b.width + 2 * pad, height: b.height + 2 * pad, fill: 'transparent', 'pointer-events': 'all' }));
+  });
+}
+
 // Перетаскивание элемента сцены: onDrag получает координаты в системе 960×540
 export function draggable(scene, node, { onDrag, onEnd }) {
+  touchTarget(node);
   node.style.cursor = 'grab';
   node.addEventListener('pointerdown', (e) => {
     node.setPointerCapture(e.pointerId);
