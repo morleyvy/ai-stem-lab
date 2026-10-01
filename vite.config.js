@@ -49,7 +49,15 @@ export default defineConfig(({ mode }) => {
   for (const name of ['GEMINI_API_KEY', 'GEMINI_MODEL', 'ANTHROPIC_API_KEY']) {
     if (env[name] && !process.env[name]) process.env[name] = env[name];
   }
-  return { plugins: [localApi(), offline()] };
+  return {
+    plugins: [localApi(), offline()],
+    // Кроме приложения — отдельные страницы-документы из подвала (src/docPage.js)
+    build: {
+      rollupOptions: {
+        input: Object.fromEntries(['index', 'about', 'faq'].map((name) => [name, `${name}.html`])),
+      },
+    },
+  };
 });
 
 // Офлайн-режим: сайт и все работы кэшируются при первом заходе, дальше открываются без сети.
@@ -81,6 +89,10 @@ function offline() {
       // Запросы к ИИ всегда идут в сеть: старый закэшированный ответ про чужой опыт хуже, чем честная ошибка.
       navigateFallbackDenylist: [/^\/api\//],
       cleanupOutdatedCaches: true,
+      // Все 74 работы со сценами — в одном файле (~2,4 МБ, ~700 КБ в gzip). Офлайн-режиму он нужен целиком,
+      // а по умолчанию Workbox не кэширует файлы больше 2 МБ — без этого сайт перестал бы открываться без сети.
+      // Если файл будет расти дальше, сцены стоит грузить через import() по мере открытия работ.
+      maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
     },
   });
 }

@@ -19,7 +19,10 @@ import { answerOffline, newMemory } from './offlineChat.js';
 import { createLive } from './live.js';
 import { createConstructor } from './constructor.js';
 import { PREVIEW_ID } from './customLesson.js';
-import { applyStaticI18n, lang, locale, plural, setLang, t, tr } from './i18n.js';
+import { createTour } from './tour.js';
+import { initFeedback } from './feedback.js';
+import { initAccessibility } from './accessibility.js';
+import { addContent, applyStaticI18n, lang, locale, plural, setLang, t, tr } from './i18n.js';
 import { registerSW } from 'virtual:pwa-register';
 
 // Разметку index.html переводим до первой отрисовки экранов
@@ -122,6 +125,8 @@ function show(next, crumb = '') {
   // Режим фокуса: во время опыта убираем навигацию и декоративный фон
   document.body.classList.toggle('focus', next === 'workspace');
   $('topNav').hidden = next === 'auth' || next === 'workspace';
+  // Обучение рассказывает про экран с работами — с других экранов его не запустить
+  $('tourBtn').hidden = next !== 'menu';
   renderTopNav();
   window.scrollTo(0, 0);
   // Смена экрана без перезагрузки не слышна скринридеру — переводим фокус на заголовок
@@ -218,6 +223,8 @@ async function openLesson(target, { onExit = openMenu } = {}) {
     onNext: typeof target === 'number' ? nextInSubject(target) : null,
   });
   chat.experimentOpened();
+  // Учитель, пробующий свою работу в конструкторе, сайт уже знает — обучение ему ни к чему
+  if (!data.preview) tour.maybeStart('lesson', LESSON_TOUR);
 }
 
 function nextInSubject(index) {
@@ -406,6 +413,10 @@ const TOOLS = {
     { title: t('tool.ai'), sub: t('tool.aiSimSub'), icon: 'tools', ai: true, open: () => openSimFree('photosynthesis', { focusAsk: true }) },
     { title: t('cn.tool'), sub: t('cn.toolSub'), icon: 'tools', ai: true, teacherTool: true, open: () => constructorUi.open() },
   ],
+  // Конструктора здесь нет: он собирает работы только по физике и биологии (src/customLesson.js)
+  informatics: [
+    { title: t('tool.ai'), sub: t('tool.aiSimSub'), icon: 'tools', ai: true, open: () => openSimFree('it-network-topology', { focusAsk: true }) },
+  ],
 };
 
 // В физике и биологии нет общей песочницы, как в химии, — свободная лаборатория это все симуляции предмета
@@ -483,7 +494,6 @@ function tile({ title, kicker, grade, sub, icon, thumb, badge, onClick, classNam
 }
 
 async function renderMenu() {
-  showOnboarding();
   $('greetWord').textContent = greetingWord();
   $('greetName').textContent = user ? user.full_name.split(' ')[0] : t('user.guest');
 
@@ -555,7 +565,7 @@ function renderSubjects(done) {
         meta: t('dash.toolsMeta'),
         tiles: () => [
           ...(s.id === 'chemistry' ? [] : freeLabTiles(s.id)),
-          ...TOOLS[s.id].filter((f) => !f.teacherTool || user?.role !== 'student').map((f) => tile({ title: f.title, sub: f.sub, icon: f.icon, thumb: f.thumb, onClick: f.open, className: f.ai ? 'free ai' : 'free' })),
+          ...(TOOLS[s.id] ?? []).filter((f) => !f.teacherTool || user?.role !== 'student').map((f) => tile({ title: f.title, sub: f.sub, icon: f.icon, thumb: f.thumb, onClick: f.open, className: f.ai ? 'free ai' : 'free' })),
         ],
       },
     ];
@@ -608,6 +618,7 @@ function renderSubjects(done) {
     if (soon) section.append(soon);
     return section;
   }));
+  tour.maybeStart('menu', MENU_TOUR);
 }
 
 // ---------- Аккаунт ученика ----------
@@ -623,6 +634,33 @@ async function openAccount() {
   if (error) accountError(t('acc.loadFail', { error }));
 }
 
+// Номер — логин для входа. Середину скрываем: за школьным компьютером экран видят соседи.
+function maskPhone(digits) {
+  if (!/^7\d{10}$/.test(digits ?? '')) return null;
+  return `+7 ${digits.slice(1, 4)} *** ** ${digits.slice(9)}`;
+}
+
+// Имя и фамилия при регистрации вводятся одним полем «Имя и фамилия» — первое слово считаем именем
+function renderProfileFacts(dl) {
+  const [first, ...rest] = user.full_name.split(' ');
+  const teacher = user.role === 'teacher';
+  const role = t(teacher ? 'role.teacher' : 'role.student');
+  const facts = [
+    [t('fact.firstName'), first],
+    [t('fact.lastName'), rest.join(' ') || '—'],
+    [t('fact.role'), role[0].toUpperCase() + role.slice(1)],
+    [t(teacher ? 'fact.gradeTeacher' : 'fact.grade'), user.grade],
+    ...(teacher ? [] : [[t('fact.class'), user.class ? user.class.name : t('fact.noClass')]]),
+    [t('fact.phone'), maskPhone(user.phone)],
+    [t('fact.since'), user.created_at ? new Date(user.created_at).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }) : null],
+  ];
+  dl.replaceChildren(...facts.filter(([, value]) => value).map(([label, value]) => {
+    const row = el('div', 'profile-fact');
+    row.append(el('dt', '', label), el('dd', '', value));
+    return row;
+  }));
+}
+
 function accountError(msg) {
   const p = document.querySelector('.account-error');
   p.hidden = !msg;
@@ -636,6 +674,8 @@ function renderAccount(p, assignments, results) {
   $('profileMeta').textContent = user
     ? t('acc.meta', { grade: user.grade, cls: user.class ? t('acc.metaClass', { name: user.class.name }) : t('acc.metaNoClass') })
     : t('acc.demo');
+  $('profileInfo').hidden = !user;
+  if (user) renderProfileFacts($('profileFacts'));
   $('accJoinForm').hidden = !user || !!user.class;
   $('leaveClassBtn').hidden = !user?.class;
   $('profileLogin').hidden = !!user;
@@ -652,12 +692,12 @@ function renderAccount(p, assignments, results) {
   $('streak').textContent = String(p.streak);
 
   $('checklist').replaceChildren(...SUBJECTS.map((s) => {
-    const { done, total } = p.subjects[s.id];
+    const { done, total } = p.subjects[s.id] ?? { done: 0, total: 0 };
     const li = el('li', 'subject-progress');
     li.style.setProperty('--c', s.color);
     const bar = el('div', 'progress');
     const fill = el('div', 'progress-bar');
-    fill.style.width = `${(done / total) * 100}%`;
+    fill.style.width = `${total ? (done / total) * 100 : 0}%`;
     bar.append(fill);
     const head = el('div', 'subject-progress-head');
     head.append(el('span', 'subject-dot'), el('span', '', tr(s.name)), el('span', 'muted', t('acc.doneOf', { done, total })));
@@ -1001,6 +1041,7 @@ let teacherClasses = [];
 let activeClassId = null;
 
 async function openTeacher() {
+  renderProfileFacts($('teacherFacts'));
   show('teacher', t('teacher.title'));
   // Работы из конструктора нужны до таблиц: они бывают среди заданий и в списке для назначения
   await constructorUi.loadOwn();
@@ -1432,6 +1473,9 @@ try {
   setLargeText(false);
 }
 
+// Версия для слабовидящих — те же три места, что и у «A+»: шапка, строка опыта и меню на телефоне
+initAccessibility(['lowVisionBtn', 'lowVisionBtnWork', 'menuLowVision']);
+
 // Переключатель языка: смена перезагружает страницу (почему — см. src/i18n.js)
 for (const b of document.querySelectorAll('.lang-switch [data-lang]')) {
   b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
@@ -1441,7 +1485,7 @@ $('langSelect').value = lang;
 $('langSelect').addEventListener('change', (e) => setLang(e.target.value));
 
 // ---------- Телефон: шапка как у приложения ----------
-// На узком экране в шапке только логотип, «RU ⌄» и меню ☰; аккаунт, крупный текст и выход — в меню.
+// На узком экране в шапке только логотип, «РУС ⌄» и меню ☰; аккаунт, крупный текст и выход — в меню.
 // Предметы переезжают из шапки в отдельную строку под ней: в одной строке с кнопками им тесно.
 const narrow = matchMedia('(max-width: 720px)');
 function placeTopNav() {
@@ -1518,11 +1562,16 @@ function gradeRange(grades) {
   const covered = ALL_LESSONS.map((l) => l.grade);
   const soon = gradeRange(GRADES.filter((g) => !covered.includes(g)));
   $('landWorksNum').textContent = String(ALL_LESSONS.length);
+  // Та же цифра в карточке входа — раньше она была вписана в разметку и отставала от каталога
+  $('authWorksNum').textContent = String(ALL_LESSONS.length);
+  $('authWorksText').textContent = plural(ALL_LESSONS.length, 'auth.point1n').replace(/^\d+\s*/, '');
   $('landWorksTitle').textContent = t(soon ? 'land.f2Soon' : 'land.f2Title', { range: gradeRange(covered), soon });
 }
 for (const card of document.querySelectorAll('.land-subject')) {
   const id = card.dataset.subject;
   const topics = TOPICS[id] ?? [];
+  // Предмет без показанных работ (см. SHOWN_NEW_LABS в src/data/catalog.js) на лендинге не рекламируем
+  if (!topics.length) { card.remove(); continue; }
   const works = topics.reduce((sum, topic) => sum + topic.lessons.length, 0);
   const range = gradeRange(ALL_LESSONS.filter((l) => l.subject === id).map((l) => l.grade));
   card.style.setProperty('--c', SUBJECT_BY_ID[id].color);
@@ -1553,25 +1602,41 @@ if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: re
   for (const node of $('landing').querySelectorAll('.reveal')) reveal.observe(node);
 }
 
-// Короткая подсказка для первого визита; после «Понятно» больше не показывается
-const ONBOARDING_KEY = 'ai-stem-lab:onboarding-done';
-function showOnboarding() {
-  let done = false;
-  try {
-    done = localStorage.getItem(ONBOARDING_KEY) === '1';
-  } catch {
-    // без хранилища просто показываем подсказку
-  }
-  $('onboarding').hidden = done;
+// ---------- Обучение и обратная связь ----------
+
+const tour = createTour({ t });
+const shown = (sel) => [...document.querySelectorAll(sel)].find((n) => n.getClientRects().length) ?? null;
+// На телефоне аккаунт и настройки спрятаны в меню ☰ — показываем его вместо кнопок шапки
+const MENU_TOUR = [
+  { target: () => $('topNav'), title: t('tour.subjectsTitle'), text: t('tour.subjectsText') },
+  { target: () => shown('#subjectSections .grade-filter'), title: t('tour.gradeTitle'), text: t('tour.gradeText') },
+  { target: () => shown('#subjectSections .topic-card'), title: t('tour.topicTitle'), text: t('tour.topicText') },
+  { target: () => shown('#bannerBtn'), title: t('tour.bannerTitle'), text: t('tour.bannerText') },
+  { target: () => shown('.chat-fab'), title: t('tour.chatTitle'), text: t('tour.chatText') },
+  { target: () => shown('#accountBtn'), title: t('tour.accountTitle'), text: t('tour.accountText') },
+  { target: () => shown('#menuBtn'), title: t('tour.accountTitle'), text: t('tour.menuText') },
+];
+const LESSON_TOUR = [
+  { target: () => shown('#lab, #simCanvas'), title: t('tour.sceneTitle'), text: t('tour.sceneText') },
+  { target: () => shown('#lessonSide'), title: t('tour.coachTitle'), text: t('tour.coachText') },
+  { target: () => shown('#reagentBar, #simControls'), title: t('tour.controlsTitle'), text: t('tour.controlsText') },
+  { target: () => shown('#journalCard'), title: t('tour.journalTitle'), text: t('tour.journalText') },
+  { target: () => shown('#backBtn'), title: t('tour.exitTitle'), text: t('tour.exitText') },
+];
+$('tourBtn').addEventListener('click', () => tour.start('menu', MENU_TOUR));
+
+const feedback = initFeedback({ $, t, lang, toast, send: account.sendFeedback, currentScreen: () => screen });
+$('feedbackBtn').addEventListener('click', feedback.open);
+$('footerFeedback').addEventListener('click', feedback.open);
+
+$('footerYear').textContent = String(new Date().getFullYear());
+
+// Ссылка на Instagram: пока адреса нет, колонку «Мы в соцсетях» не показываем
+const INSTAGRAM_URL = '';
+if (INSTAGRAM_URL) {
+  $('instagramLink').href = INSTAGRAM_URL;
+  $('footerSocial').hidden = false;
 }
-$('onboardingClose').addEventListener('click', () => {
-  $('onboarding').hidden = true;
-  try {
-    localStorage.setItem(ONBOARDING_KEY, '1');
-  } catch {
-    // не запомнится — не страшно
-  }
-});
 
 // ---------- Запуск ----------
 
@@ -1650,5 +1715,21 @@ syncOnline();
 
 // Только в режиме разработки: позволяет автотестам работать без мыши.
 if (import.meta.env.DEV) {
-  window.__lab = { constructor: constructorUi, sim: () => simCtrl, pick: handlePick, busy: () => bench.isBusy(), openLesson, openSandbox, openSimFree, setTemperature, openMission, missionState: () => missions.debug(), missionList: () => missions.showList() };
+  // tryLab('id') / tryFree('id') — открыть новую работу из src/data/labs до внесения в реестр
+  const loadLab = async (id) => {
+    const [sim, lesson, kk] = await Promise.all([
+      import(/* @vite-ignore */ `/src/sims/${id}.js`),
+      import(/* @vite-ignore */ `/src/data/labs/${id}.js`),
+      import(/* @vite-ignore */ `/src/i18n/kk/labs/${id}.js`).catch(() => ({})),
+    ]);
+    addContent(kk.default ?? {}, kk.patterns ?? []);
+    SIMS[sim.default.id] = sim.default;
+    return lesson.default;
+  };
+  const tryLab = async (id) => openLesson(await loadLab(id));
+  const tryFree = async (id) => {
+    await loadLab(id);
+    return openSimFree(id);
+  };
+  window.__lab = { tryLab, tryFree, constructor: constructorUi, sim: () => simCtrl, pick: handlePick, busy: () => bench.isBusy(), openLesson, openSandbox, openSimFree, setTemperature, openMission, missionState: () => missions.debug(), missionList: () => missions.showList() };
 }

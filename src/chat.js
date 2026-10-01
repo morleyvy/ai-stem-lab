@@ -17,7 +17,7 @@ const CLOSE_MS = 200;
 
 // Подсказки для пустого чата: первый вопрос проще выбрать, чем придумать.
 // Тексты на обоих языках — в src/i18n/ui.js (chat.sugg.*, chat.sim.*).
-const SUBJECT_SUGGESTIONS = ['chemistry', 'physics', 'biology'];
+const SUBJECT_SUGGESTIONS = ['chemistry', 'physics', 'biology', 'informatics'];
 const SIM_SUGGESTION = ['ohm', 'lens', 'pendulum', 'archimedes'];
 
 const SEND_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';

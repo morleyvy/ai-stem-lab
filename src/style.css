@@ -758,6 +758,45 @@ button:focus-visible, a:focus-visible { box-shadow: 0 0 0 6px rgba(26, 92, 255, 
 .skip-link:focus { top: 16px; }
 
 .font-btn { margin-left: auto; font-weight: 600; min-width: 44px; }
+.low-vision-btn { min-width: 44px; display: inline-grid; place-items: center; padding-inline: 10px; }
+.low-vision-btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
+/* Версия для слабовидящих (src/accessibility.js): чёрное на белом, крупный текст, толстые рамки
+   и заметный фокус. Светлая, а не тёмная схема: во многих местах фон задан прямо белым (#fff),
+   и тёмная тема оставила бы белые «дыры» с белым текстом. */
+html.low-vision {
+  font-size: 20px;
+  --bg: #ffffff;
+  --soft: #ffffff;
+  --line: #000000;
+  --text: #000000;
+  --muted: #1f1f1f;
+  --accent: #0033b3;
+  --accent-hover: #00258a;
+  --accent-soft: #fff3b0;
+  --violet: #3d0aa8;
+  --violet-soft: #ffffff;
+  --good: #00562f;
+  --good-soft: #ffffff;
+  --bad: #9e0000;
+  --bad-soft: #ffffff;
+  --warn: #5c3300;
+  --warn-soft: #ffffff;
+  --glass: #ffffff;
+  --shadow: none;
+}
+html.low-vision body { font-weight: 500; line-height: 1.7; letter-spacing: 0.01em; }
+html.low-vision *, html.low-vision *::before, html.low-vision *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  backdrop-filter: none !important;
+}
+html.low-vision :where(.muted, .small, small, label, p, li, h1, h2, h3, h4) { color: var(--text); }
+html.low-vision :where(button, input, select, textarea) { border: 2px solid #000 !important; }
+html.low-vision :where(a) { text-decoration: underline; text-underline-offset: 3px; }
+/* tabindex=-1 — заголовки, куда фокус переносится программно; рамка вокруг них только сбивает */
+html.low-vision :focus-visible:not([tabindex='-1']) { outline: 4px solid #ffbf00 !important; outline-offset: 3px; }
+/* Рисунок опыта перерисовывать незачем — достаточно поднять контраст и насыщенность */
+html.low-vision :where(#lab svg, #simCanvas) { filter: contrast(1.25) saturate(1.15); }
 .offline-badge { padding: 4px 12px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
 .user-box { margin-left: 12px; }
 
@@ -970,11 +1009,6 @@ body.focus .lab-card { overflow: clip; }
 .guest-btn { width: 100%; margin-top: 14px; background: transparent; border: 1px dashed #c7d2fe; color: var(--accent); }
 .guest-btn:hover { background: var(--accent-soft); }
 
-.onboarding { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 16px 20px; margin-bottom: 18px; box-shadow: var(--shadow); }
-.onboarding-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; flex: 1 1 520px; }
-.onboarding-steps div { display: flex; align-items: center; gap: 10px; font-size: 0.92rem; color: var(--text); }
-.onboarding-steps b { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-@media (max-width: 720px) { .onboarding-steps { grid-template-columns: 1fr; } }
 
 #auth:not([hidden]), #menu:not([hidden]), #teacher:not([hidden]), #workspace:not([hidden]) { animation: screen-in 0.25s ease-out; }
 @keyframes screen-in { from { opacity: 0; transform: translateY(6px); } }
@@ -1503,7 +1537,7 @@ body:has(> .chat:not([hidden])) { padding-bottom: calc(96px + env(safe-area-inse
 .land-feature-num { display: block; font-size: 2.4rem; font-weight: 300; line-height: 1.1; color: var(--accent); margin-bottom: 4px; }
 
 /* Предметы — в их фирменных цветах, как в меню после входа */
-.land-subjects { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.land-subjects { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .land-subject {
   --c: var(--accent);
   display: flex;
@@ -2057,7 +2091,7 @@ body.focus .chat-hint { display: none; }
 }
 
 /* ---------- Телефон: шапка как у приложения ----------
-   Одна строка: логотип слева, язык «RU ⌄» и меню ☰ справа. Аккаунт, крупный текст и выход — в меню,
+   Одна строка: логотип слева, язык «РУС ⌄» и меню ☰ справа. Аккаунт, крупный текст и выход — в меню,
    предметы — строкой под шапкой (main.js переносит #topNav). На компьютере всего этого нет. */
 .lang-select,
 .menu-btn,
@@ -2066,6 +2100,7 @@ body.focus .chat-hint { display: none; }
   .top { display: flex; padding: 8px 12px; gap: 8px; min-height: 56px; }
   .top .brand-text { display: flex; justify-content: center; }
   .top .font-btn,
+  .top .low-vision-btn,
   .top .lang-switch,
   .top .user-box { display: none; }
   .top #offlineBadge { margin-left: auto; }
@@ -2170,3 +2205,91 @@ body.focus .chat-hint { display: none; }
   .nav-tab::before { display: none; }
   .nav-tab { font-size: 0.9rem; }
 }
+
+/* ---------- Обучение: подсветка элемента и подсказка рядом (src/tour.js) ---------- */
+.tour { position: fixed; inset: 0; z-index: 70; }
+.tour-spot {
+  position: fixed;
+  border-radius: 16px;
+  /* Затемнение — тень вокруг выреза: так подсвеченный элемент остаётся «живым», без копии */
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.58);
+  outline: 3px solid #fff;
+  pointer-events: none;
+  transition: top 0.2s, left 0.2s, width 0.2s, height 0.2s;
+}
+.tour-pop { position: fixed; width: min(360px, calc(100vw - 16px)); background: #fff; color: var(--text); border-radius: 18px; padding: 18px 20px; box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3); }
+.tour-count { color: var(--accent); font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; }
+.tour-title { font-size: 1.12rem; margin-bottom: 6px; }
+.tour-text { margin-bottom: 16px; }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tour-nav { display: flex; gap: 8px; margin-left: auto; }
+.tour-actions button { min-height: 44px; }
+@media (max-width: 720px) {
+  /* На телефоне подсказка — панель снизу или сверху, чтобы не закрыть подсвеченное */
+  .tour-pop { left: 8px; right: 8px; width: auto; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .tour-pop.at-top { bottom: auto; top: calc(8px + env(safe-area-inset-top, 0px)); }
+}
+
+/* ---------- Подвал: обратная связь ---------- */
+.site-footer { max-width: 1180px; margin: 0 auto; padding: 0 24px calc(28px + env(safe-area-inset-bottom, 0px)); }
+body.focus .site-footer { display: none; }
+.site-footer-feedback { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 22px 24px; border-radius: var(--radius); background: var(--accent-soft); margin-bottom: 20px; }
+.site-footer-feedback p { max-width: 560px; }
+.site-footer-title { margin-bottom: 4px; }
+.site-footer-feedback .primary { flex: none; padding: 12px 24px; }
+/* Колонки ссылок, как в подвалах больших сайтов: на телефоне — по две в ряд */
+.site-footer-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px 32px; padding-block: 8px 20px; }
+.footer-col { display: flex; flex-direction: column; align-items: flex-start; }
+.footer-col-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; }
+.footer-link { padding: 6px 0; min-height: 40px; border: 0; border-radius: 6px; background: none; box-shadow: none; color: var(--muted); font-weight: 400; text-align: left; text-decoration: none; display: inline-flex; align-items: center; }
+.footer-link:hover { color: var(--accent); border: 0; text-decoration: underline; text-underline-offset: 3px; }
+.footer-link[aria-pressed='true'] { color: var(--accent); font-weight: 600; }
+@media (max-width: 720px) { .site-footer-cols { grid-template-columns: 1fr 1fr; } }
+.site-footer-bottom { padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+
+
+/* Мои данные в аккаунте: подпись над значением, в несколько колонок */
+.profile-info { margin-bottom: 18px; }
+.profile-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px 24px; margin: 0; }
+.profile-fact dt { color: var(--muted); font-size: 0.85rem; }
+.profile-fact dd { margin: 2px 0 0; font-weight: 500; overflow-wrap: anywhere; }
+
+.fb-dialog { border: 0; border-radius: 20px; padding: 22px; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); background: #fff; color: var(--text); box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25); }
+.fb-dialog::backdrop { background: rgba(15, 23, 42, 0.45); }
+.fb-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.fb-head h2 { margin: 0; }
+.fb-head .ghost { min-width: 44px; min-height: 44px; padding: 0; }
+.fb-kinds { border: 0; padding: 0; margin: 0; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); }
+.fb-kinds legend { padding: 0; margin-bottom: 6px; font-size: 0.9rem; font-weight: 500; }
+.fb-kinds label { font-size: 0.95rem; }
+.fb-dialog textarea { resize: vertical; min-height: 120px; }
+.fb-count { text-align: right; margin-top: -8px; }
+
+/* ---------- Отдельные страницы: о проекте, вопросы, политика (src/docPage.js) ----------
+   Вид документа: узкая колонка текста, без карточек и декора — читается как официальный текст */
+.doc-top .brand { text-decoration: none; color: inherit; }
+.doc-top .lang-switch { margin-left: auto; }
+.doc-main { max-width: 760px; margin: 0 auto; padding: 32px 24px 56px; }
+.doc-crumbs { color: var(--muted); font-size: 0.88rem; margin-bottom: 18px; }
+.doc-crumbs a { color: var(--accent); text-decoration: none; }
+.doc-crumbs a:hover { text-decoration: underline; }
+.doc-title { font-size: clamp(1.7rem, 4vw, 2.3rem); font-weight: 500; margin-bottom: 8px; }
+.doc-updated { color: var(--muted); font-size: 0.9rem; margin-bottom: 18px; }
+.doc-lead { font-size: 1.08rem; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.doc-section { padding-top: 24px; }
+.doc-section h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: 8px; }
+.doc-section p + p, .doc-section ul + p { margin-top: 10px; }
+.doc-section ul { margin: 8px 0 0; padding-left: 1.3em; }
+.doc-section li + li { margin-top: 6px; }
+.doc-footer { max-width: 760px; margin: 0 auto; padding: 20px 24px calc(28px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+.doc-footer-links { display: flex; flex-wrap: wrap; gap: 0 24px; }
+.doc-copy { color: var(--muted); font-size: 0.88rem; margin-top: 8px; }
+.doc-faq { border-bottom: 1px solid var(--line); }
+.doc-faq summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; cursor: pointer; list-style: none; }
+.doc-faq summary::-webkit-details-marker { display: none; }
+.doc-faq summary h2 { font-size: 1.05rem; font-weight: 600; margin: 0; }
+/* Плюс превращается в минус, когда ответ открыт */
+.doc-faq summary::after { content: '+'; flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--soft); color: var(--accent); font-size: 1.3rem; line-height: 1; }
+.doc-faq[open] summary::after { content: '−'; }
+.doc-faq summary:hover h2 { color: var(--accent); }
+.doc-faq p { padding: 0 48px 18px 0; }

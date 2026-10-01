@@ -92,11 +92,15 @@ export function computeProgress(results, lessons, assignments = []) {
     { id: 'chem', icon: 'acids', got: bySubject('chemistry').done === bySubject('chemistry').total },
     { id: 'phys', icon: 'electricity', got: bySubject('physics').done === bySubject('physics').total },
     { id: 'bio', icon: 'plants', got: bySubject('biology').done === bySubject('biology').total },
+    { id: 'it', icon: 'code', got: bySubject('informatics').total > 0 && bySubject('informatics').done === bySubject('informatics').total },
     { id: 'perfect', icon: 'target', got: perfect >= 3 },
     { id: 'streak', icon: 'calendar', got: streak >= 3 },
     { id: 'ontime', icon: 'clock', got: onTime >= 3 },
     { id: 'all', icon: 'award', got: done.size === lessons.length },
-  ].map((b) => ({ ...b, name: t(`badge.${b.id}`), desc: t(`badge.${b.id}.desc`) }));
+  ]
+    // Если работ по информатике на сайте нет, недостижимое достижение не показываем
+    .filter((b) => b.id !== 'it' || bySubject('informatics').total > 0)
+    .map((b) => ({ ...b, name: t(`badge.${b.id}`), desc: t(`badge.${b.id}.desc`) }));
 
   return {
     xp,
@@ -105,7 +109,7 @@ export function computeProgress(results, lessons, assignments = []) {
     done,
     best,
     badges,
-    subjects: { chemistry: bySubject('chemistry'), physics: bySubject('physics'), biology: bySubject('biology') },
+    subjects: Object.fromEntries([...new Set(lessons.map((l) => l.subject))].map((s) => [s, bySubject(s)])),
   };
 }
 

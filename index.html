@@ -23,14 +23,15 @@
     </button>
     <nav id="topNav" class="top-nav" aria-label="Предметы" data-i18n-attr="aria-label:header.subjects" hidden></nav>
     <button id="fontBtn" type="button" class="ghost small font-btn" aria-pressed="false" title="Крупный текст" aria-label="Крупный текст" data-i18n-attr="title:header.font;aria-label:header.font">A+</button>
+    <button id="lowVisionBtn" type="button" class="ghost small low-vision-btn" aria-pressed="false" title="Версия для слабовидящих" aria-label="Версия для слабовидящих" data-i18n-attr="title:header.lowVision;aria-label:header.lowVision"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
     <span id="offlineBadge" class="offline-badge" role="status" data-i18n-attr="title:net.offlineHint" title="Нет интернета. Опыты работают, чат с Шоқаном и журнал класса — нет." hidden><span data-i18n="net.offline">Офлайн</span></span>
     <div class="lang-switch" role="group" aria-label="Язык / Тіл">
-      <button type="button" data-lang="ru" lang="ru" aria-pressed="true" aria-label="Русский">RU</button>
+      <button type="button" data-lang="ru" lang="ru" aria-pressed="true" aria-label="Русский">РУС</button>
       <button type="button" data-lang="kk" lang="kk" aria-pressed="false" aria-label="Қазақша">ҚАЗ</button>
     </div>
-    <!-- Телефон: вместо переключателя и кнопок — «RU ⌄» и меню ☰ (стили — «Телефон: шапка как у приложения») -->
+    <!-- Телефон: вместо переключателя и кнопок — «РУС ⌄» и меню ☰ (стили — «Телефон: шапка как у приложения») -->
     <select id="langSelect" class="lang-select" aria-label="Язык / Тіл">
-      <option value="ru" lang="ru">RU</option>
+      <option value="ru" lang="ru">РУС</option>
       <option value="kk" lang="kk">ҚАЗ</option>
     </select>
     <button id="menuBtn" type="button" class="menu-btn" aria-expanded="false" aria-controls="siteMenu" aria-label="Меню" data-i18n-attr="aria-label:menu.open">
@@ -42,6 +43,7 @@
         <span><span id="menuName" class="site-menu-name"></span><span class="site-menu-sub" data-i18n="header.account">Мой аккаунт</span></span>
       </button>
       <button id="menuFont" type="button" class="site-menu-item" aria-pressed="false"><span data-i18n="header.font">Крупный текст</span><span class="site-menu-check" aria-hidden="true">A+</span></button>
+      <button id="menuLowVision" type="button" class="site-menu-item" aria-pressed="false"><span data-i18n="header.lowVision">Версия для слабовидящих</span><span class="site-menu-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></span></button>
       <button id="menuLogout" type="button" class="site-menu-item" data-i18n="header.logout">Выйти</button>
     </div>
     <div id="userBox" class="user-box" hidden>
@@ -71,8 +73,8 @@
       </div>
       <p data-i18n="auth.lead">Лабораторные работы без оборудования: гипотеза, опыт, наблюдения и вывод. Результаты сохраняются и видны учителю.</p>
       <ul class="hero-points">
-        <li><b>21</b><span data-i18n="auth.point1">лабораторная работа по программе</span></li>
-        <li><b>3</b><span data-i18n="auth.point2">предмета: химия, физика, биология</span></li>
+        <li><b id="authWorksNum">21</b><span id="authWorksText">лабораторная работа по программе</span></li>
+        <li><b>4</b><span data-i18n="auth.point2">предмета: химия, физика, биология, информатика</span></li>
         <li><b data-i18n="auth.point3num">ИИ</b><span data-i18n="auth.point3">ассистент для объяснений</span></li>
       </ul>
     </div>
@@ -177,7 +179,7 @@
     <section class="land-section" aria-labelledby="landSubjTitle">
       <div class="land-head reveal">
         <span class="tag" data-i18n="land.subjTag">Предметы</span>
-        <h2 id="landSubjTitle" class="land-title" data-i18n="land.subjTitle">Три предмета — одна лаборатория</h2>
+        <h2 id="landSubjTitle" class="land-title" data-i18n="land.subjTitle">Четыре предмета — одна лаборатория</h2>
         <p class="land-lead" data-i18n="land.subjLead">Работы сгруппированы по темам школьного учебника.</p>
       </div>
       <ul class="land-subjects">
@@ -205,6 +207,14 @@
             <p class="land-subject-topics"></p>
           </div>
         </li>
+        <li class="land-subject reveal" data-subject="informatics">
+          <img src="/icons/informatics.webp" alt="" width="88" height="88" loading="lazy" decoding="async">
+          <div>
+            <h3 class="land-subject-name">Информатика</h3>
+            <p class="land-subject-count"></p>
+            <p class="land-subject-topics"></p>
+          </div>
+        </li>
       </ul>
     </section>
 
@@ -219,25 +229,11 @@
         <button id="landLoginBtn" type="button" data-i18n="auth.login">Войти</button>
       </div>
     </section>
-
-    <footer class="land-footer">
-      <span>© Shoqan</span>
-      <span data-i18n="header.sub">Виртуальная STEM-лаборатория</span>
-    </footer>
   </div>
 
   <!-- ---------- Личный кабинет ---------- -->
   <section id="menu" role="main" class="dash" aria-labelledby="menuTitle" hidden>
     <h1 id="menuTitle" class="greeting"><span id="greetWord"></span>, <span id="greetName" class="grad-text"></span></h1>
-
-    <div id="onboarding" class="onboarding" hidden>
-      <div class="onboarding-steps">
-        <div><b>1</b><span data-i18n="onb.step1">Выберите предмет в шапке и тему ниже</span></div>
-        <div><b>2</b><span data-i18n="onb.step2">Откройте лабораторную работу</span></div>
-        <div><b>3</b><span data-i18n="onb.step3">Следуйте шагам справа — кнопки подскажут действие</span></div>
-      </div>
-      <button id="onboardingClose" type="button" class="ghost small" data-i18n="onb.close">Понятно</button>
-    </div>
 
     <div id="banner" class="banner">
       <div class="banner-text">
@@ -265,6 +261,10 @@
       </form>
     </div>
     <p class="form-error teacher-error" hidden></p>
+    <section id="teacherInfo" class="card profile-info" aria-labelledby="teacherInfoTitle">
+      <h2 id="teacherInfoTitle" data-i18n="acc.myData">Мои данные</h2>
+      <dl id="teacherFacts" class="profile-facts"></dl>
+    </section>
     <nav id="classTabs" class="class-tabs" aria-label="Классы" data-i18n-attr="aria-label:teacher.classes"></nav>
 
     <div id="classPanel" class="class-panel" hidden>
@@ -321,6 +321,11 @@
       <p class="form-error account-error" hidden></p>
     </div>
 
+    <section id="profileInfo" class="card profile-info" aria-labelledby="profileInfoTitle" hidden>
+      <h2 id="profileInfoTitle" data-i18n="acc.myData">Мои данные</h2>
+      <dl id="profileFacts" class="profile-facts"></dl>
+    </section>
+
     <div class="stat-row">
       <div class="card stat"><span class="stat-label" data-i18n="acc.level">Уровень</span><b id="levelNum"></b><span id="levelTitle" class="muted small"></span></div>
       <div class="card stat stat-xp">
@@ -367,6 +372,7 @@
       <button id="backBtn" type="button" class="ghost small" data-i18n="work.back">← Назад</button>
       <h1 id="workTitle" class="work-title"></h1>
       <button id="fontBtnWork" type="button" class="ghost small font-btn-work" aria-pressed="false" title="Крупный текст" aria-label="Крупный текст" data-i18n-attr="title:header.font;aria-label:header.font">A+</button>
+      <button id="lowVisionBtnWork" type="button" class="ghost small font-btn-work" aria-pressed="false" title="Версия для слабовидящих" aria-label="Версия для слабовидящих" data-i18n-attr="title:header.lowVision;aria-label:header.lowVision"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
       <button id="fullscreenBtn" type="button" class="ghost small fullscreen-btn" aria-pressed="false" title="Во весь экран" aria-label="Во весь экран" data-i18n-attr="title:work.fullscreen;aria-label:work.fullscreen" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
 
@@ -490,6 +496,58 @@
       </details>
     </div>
   </main>
+
+  <!-- Подвал общий для всех экранов, кроме опыта: там режим фокуса -->
+  <footer id="siteFooter" class="site-footer">
+    <div class="site-footer-feedback">
+      <div>
+        <h2 class="site-footer-title" data-i18n="fb.title">Помогите сделать Shoqan лучше</h2>
+        <p class="muted" data-i18n="fb.lead">Расскажите, что неудобно, что сломалось или чего не хватает. Мы читаем каждый отзыв.</p>
+      </div>
+      <button id="feedbackBtn" type="button" class="primary" data-i18n="fb.open">Оставить отзыв</button>
+    </div>
+    <nav class="site-footer-cols" aria-label="Подвал сайта" data-i18n-attr="aria-label:foot.nav">
+      <div class="footer-col">
+        <h2 class="footer-col-title">Shoqan</h2>
+        <a class="footer-link" href="/about.html" data-i18n="foot.about">О проекте</a>
+        <button id="footerFeedback" type="button" class="footer-link" data-i18n="fb.dialogTitle">Обратная связь</button>
+      </div>
+      <div class="footer-col">
+        <h2 class="footer-col-title" data-i18n="foot.help">Помощь</h2>
+        <button id="tourBtn" type="button" class="footer-link" data-i18n="tour.replay" hidden>Как пользоваться сайтом</button>
+        <a class="footer-link" href="/faq.html" data-i18n="foot.faq">Вопросы и ответы</a>
+      </div>
+      <div id="footerSocial" class="footer-col" hidden>
+        <h2 class="footer-col-title" data-i18n="foot.social">Мы в соцсетях</h2>
+        <a id="instagramLink" class="footer-link" target="_blank" rel="noopener noreferrer">Instagram</a>
+      </div>
+    </nav>
+    <div class="site-footer-bottom">
+      <span>© <span id="footerYear"></span> Shoqan · <span data-i18n="header.sub">Виртуальная STEM-лаборатория</span></span>
+    </div>
+  </footer>
+
+  <dialog id="feedbackDialog" class="fb-dialog" aria-labelledby="feedbackTitle">
+    <form id="feedbackForm" class="form" novalidate>
+      <div class="fb-head">
+        <h2 id="feedbackTitle" data-i18n="fb.dialogTitle">Обратная связь</h2>
+        <button id="feedbackClose" type="button" class="ghost small" aria-label="Закрыть" data-i18n-attr="aria-label:fb.close">✕</button>
+      </div>
+      <fieldset class="fb-kinds role-select">
+        <legend data-i18n="fb.kindLabel">О чём отзыв?</legend>
+        <label><input type="radio" name="kind" value="idea" checked /> <span data-i18n="fb.kindIdea">Идея</span></label>
+        <label><input type="radio" name="kind" value="bug" /> <span data-i18n="fb.kindBug">Ошибка</span></label>
+        <label><input type="radio" name="kind" value="other" /> <span data-i18n="fb.kindOther">Другое</span></label>
+      </fieldset>
+      <label><span data-i18n="fb.messageLabel">Ваш отзыв</span>
+        <textarea name="message" rows="5" required placeholder="Например: не понял, куда нажать после гипотезы" data-i18n-attr="placeholder:fb.placeholder" aria-describedby="feedbackCount feedbackNote"></textarea>
+      </label>
+      <p id="feedbackCount" class="muted small fb-count"></p>
+      <p id="feedbackNote" class="muted small" data-i18n="fb.note">Не пишите сюда телефон и другие личные данные.</p>
+      <p id="feedbackError" class="form-error" role="alert" hidden></p>
+      <button type="submit" class="primary" data-i18n="fb.send">Отправить</button>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
 

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>О проекте — Shoqan</title>
+  <link rel="stylesheet" href="/src/fonts.css" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#1a5cff" />
+</head>
+<!-- Текст страницы рисует src/docPage.js из src/data/pages.js на языке посетителя -->
+<body class="doc" data-page="about">
+  <header class="top doc-top">
+    <a class="brand" href="/" aria-label="На главную" data-i18n-attr="aria-label:header.home">
+      <img class="logo" src="/icons/logo.webp" alt="" aria-hidden="true" width="44" height="44" decoding="async">
+      <span class="brand-text">
+        <span class="brand-name">Shoqan</span>
+        <span class="brand-sub" data-i18n="header.sub">Виртуальная STEM-лаборатория</span>
+      </span>
+    </a>
+    <div class="lang-switch" role="group" aria-label="Язык / Тіл">
+      <button type="button" data-lang="ru" lang="ru" aria-pressed="true" aria-label="Русский">РУС</button>
+      <button type="button" data-lang="kk" lang="kk" aria-pressed="false" aria-label="Қазақша">ҚАЗ</button>
+    </div>
+    <select id="langSelect" class="lang-select" aria-label="Язык / Тіл">
+      <option value="ru" lang="ru">РУС</option>
+      <option value="kk" lang="kk">ҚАЗ</option>
+    </select>
+  </header>
+  <main id="doc" class="doc-main"><h1>О проекте</h1></main>
+  <footer id="docFooter" class="doc-footer"></footer>
+  <script type="module" src="/src/docPage.js"></script>
+</body>
+</html>

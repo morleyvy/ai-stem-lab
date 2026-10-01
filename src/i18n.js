@@ -16,6 +16,7 @@ import CHEM, { patterns as CHEM_PATTERNS } from './i18n/kk/content-chem.js';
 import SIMS, { patterns as SIM_PATTERNS } from './i18n/kk/content-sims.js';
 import CORE, { patterns as CORE_PATTERNS } from './i18n/kk/content-core.js';
 import ROADMAP from './i18n/kk/content-roadmap.js';
+import LABS, { patterns as LAB_PATTERNS } from './i18n/kk/labs/index.js';
 
 export const LANGS = ['ru', 'kk'];
 const LANG_KEY = 'ai-stem-lab:lang';
@@ -92,7 +93,7 @@ export function plural(n, key) {
 // Словари содержимого собираются в Map один раз: tr() вызывается на каждое показание прибора.
 const EXACT = new Map();
 if (lang === 'kk') {
-  for (const dict of [CORE, CHEM, SIMS, ROADMAP]) {
+  for (const dict of [CORE, CHEM, SIMS, ROADMAP, LABS]) {
     for (const [ru, kk] of Object.entries(dict)) {
       // Одна строка в двух словарях с разным переводом — молча победил бы последний; в разработке предупреждаем
       if (import.meta.env?.DEV && EXACT.has(ru) && EXACT.get(ru) !== kk) console.warn('[i18n] разный перевод одной строки:', ru);
@@ -100,10 +101,19 @@ if (lang === 'kk') {
     }
   }
 }
-const PATTERNS = lang === 'kk' ? [...CORE_PATTERNS, ...CHEM_PATTERNS, ...SIM_PATTERNS] : [];
+const PATTERNS = lang === 'kk' ? [...CORE_PATTERNS, ...CHEM_PATTERNS, ...SIM_PATTERNS, ...LAB_PATTERNS] : [];
 // Результаты шаблонов кэшируем, но ограниченно: показания с числами почти не повторяются.
 const patternCache = new Map();
 const PATTERN_CACHE_MAX = 500;
+
+// Только для проверки новой работы в режиме разработки (window.__lab.tryLab в main.js):
+// её словарь ещё не внесён в src/i18n/kk/labs/index.js, а посмотреть казахскую версию уже нужно.
+export function addContent(dict, patterns = []) {
+  if (lang !== 'kk') return;
+  for (const [ru, kk] of Object.entries(dict)) EXACT.set(ru, kk);
+  PATTERNS.unshift(...patterns);
+  patternCache.clear();
+}
 
 export function tr(ruText) {
   if (lang === 'ru' || typeof ruText !== 'string' || !ruText) return ruText;

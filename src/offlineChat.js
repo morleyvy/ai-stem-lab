@@ -6,8 +6,13 @@
 import { ALIASES, SUBSTANCES } from './data/substances.js';
 import { runExperiment } from './engine.js';
 // Казахские названия регуляторов нужны для разбора вопроса на любом языке интерфейса
-import KK_SIMS from './i18n/kk/content-sims.js';
+import KK_CONTENT from './i18n/kk/content-sims.js';
+import KK_LABS from './i18n/kk/labs/index.js';
 import { OFFLINE_FAQ } from './data/offlineFaq.js';
+import { LAB_FAQ } from './data/labs/index.js';
+import { SHOWN_NEW_LABS } from './data/catalog.js';
+
+const KK_SIMS = { ...KK_CONTENT, ...KK_LABS };
 
 // Корни слов на русском и казахском. Порядок важен: первый совпавший вид вопроса и определяет ответ.
 const INTENTS = [
@@ -205,7 +210,8 @@ function simWhatIf(question, { def, params }, { t, tr }) {
 // Вопросительные и служебные слова есть почти в каждом вопросе и ничего не различают
 const STOP = new Set(stems('почему зачем какой какая какие каких сколько такое будет если нужно можно этот этой этого тоже очень когда откуда чтобы неге деген қалай қандай үшін болады керек және бұл осы'));
 
-const FAQ_INDEX = OFFLINE_FAQ.map((entry) => ({
+// Скрытые работы не должны всплывать в ответах Шоқана
+const FAQ_INDEX = [...OFFLINE_FAQ, ...LAB_FAQ.filter((f) => SHOWN_NEW_LABS.has(f.scope))].map((entry) => ({
   entry,
   variants: [...entry.q, ...entry.qk].map((v) => new Set(stems(v).filter((s) => !STOP.has(s)))),
 }));
@@ -229,8 +235,9 @@ function searchFaq(question, facts, lang) {
       if (!v.size) continue;
       const common = [...v].filter((s) => asked.has(s)).length;
       // Одного общего корня мало: «расскажи» и «расстояние» совпадают по первым буквам.
-      // Исключение — короткие вопросы вроде «что такое осмос», где значимое слово одно
-      if (common < Math.min(2, v.size, asked.size)) continue;
+      // Исключение — заготовки вроде «что такое осмос», где значимое слово одно. Короткий вопрос
+      // ученика исключением не считаем: «кто такой Ньютон» — не вопрос про второй закон Ньютона
+      if (common < Math.min(2, v.size)) continue;
       const score = common / Math.sqrt(v.size * asked.size) + bonus;
       if (score > (best?.score ?? 0)) best = { entry, score };
     }

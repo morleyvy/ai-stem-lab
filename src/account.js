@@ -58,6 +58,7 @@ function humanError(error) {
   // Раньше проверки заданий: без миграции 004 учителю нужна именно она, а не 002
   if (/custom_lessons/i.test(msg) && /exist|schema cache/i.test(msg)) return t('err.noCustomLessons');
   if (/custom lessons limit/i.test(msg)) return t('err.customLimit');
+  if (/feedback/i.test(msg) && /exist|schema cache/i.test(msg)) return t('fb.errNoServer');
   if (/relation .*assignments.* does not exist|assignments/i.test(msg) && /exist|schema cache/i.test(msg)) return t('err.noAssignments');
   if (/rate limit|too many/i.test(msg)) return t('err.rateLimit');
   if (/fetch|network/i.test(msg)) return t('err.network');
@@ -148,7 +149,7 @@ export async function loadProfile() {
   if (!supabase) return null;
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
-  const profile = unwrap(await supabase.from('profiles').select('id, role, full_name, grade, class_id').eq('id', session.user.id).maybeSingle());
+  const profile = unwrap(await supabase.from('profiles').select('id, role, full_name, grade, class_id, created_at').eq('id', session.user.id).maybeSingle());
   if (!profile) return null;
   let klass = null;
   if (profile.role === 'teacher') {
@@ -156,7 +157,9 @@ export async function loadProfile() {
   } else if (profile.class_id) {
     klass = unwrap(await supabase.from('classes').select('id, name').eq('id', profile.class_id).maybeSingle());
   }
-  return { ...profile, class: klass };
+  // Телефон в таблицах не хранится — он только логин; показываем его владельцу в «Моих данных»
+  const phone = session.user.email?.endsWith(`@${LOGIN_DOMAIN}`) ? session.user.email.split('@')[0] : null;
+  return { ...profile, phone, class: klass };
 }
 
 export function saveResult(lessonId, stats) {
@@ -167,6 +170,13 @@ export function saveResult(lessonId, stats) {
     q_ok: stats.qOk,
     q_total: stats.qTotal,
   })));
+}
+
+// Данные уже проверены validateFeedback (src/feedback.js). Без .select(): читать отзывы
+// клиенту запрещено (миграция 007), и запрос с возвратом строки упал бы.
+export function sendFeedback({ kind, message, screen, lang }) {
+  if (!supabase) return Promise.resolve({ ok: false, error: t('fb.errNoServer') });
+  return run(async () => unwrap(await supabase.from('feedback').insert({ kind, message, screen, lang })));
 }
 
 export function loadMyResults(userId) {
