@@ -2233,10 +2233,6 @@ body.focus .chat-hint { display: none; }
 /* ---------- Подвал: обратная связь ---------- */
 .site-footer { max-width: 1180px; margin: 0 auto; padding: 0 24px calc(28px + env(safe-area-inset-bottom, 0px)); }
 body.focus .site-footer { display: none; }
-.site-footer-feedback { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 22px 24px; border-radius: var(--radius); background: var(--accent-soft); margin-bottom: 20px; }
-.site-footer-feedback p { max-width: 560px; }
-.site-footer-title { margin-bottom: 4px; }
-.site-footer-feedback .primary { flex: none; padding: 12px 24px; }
 /* Колонки ссылок, как в подвалах больших сайтов: на телефоне — по две в ряд */
 .site-footer-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px 32px; padding-block: 8px 20px; }
 .footer-col { display: flex; flex-direction: column; align-items: flex-start; }

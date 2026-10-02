@@ -1626,7 +1626,6 @@ const LESSON_TOUR = [
 $('tourBtn').addEventListener('click', () => tour.start('menu', MENU_TOUR));
 
 const feedback = initFeedback({ $, t, lang, toast, send: account.sendFeedback, currentScreen: () => screen });
-$('feedbackBtn').addEventListener('click', feedback.open);
 $('footerFeedback').addEventListener('click', feedback.open);
 
 $('footerYear').textContent = String(new Date().getFullYear());
