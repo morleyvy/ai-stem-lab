@@ -22,6 +22,7 @@ import { PREVIEW_ID } from './customLesson.js';
 import { createTour } from './tour.js';
 import { initFeedback } from './feedback.js';
 import { initAccessibility } from './accessibility.js';
+import * as sound from './sound.js';
 import { addContent, applyStaticI18n, lang, locale, plural, setLang, t, tr } from './i18n.js';
 import { registerSW } from 'virtual:pwa-register';
 
@@ -53,7 +54,7 @@ let user = null; // профиль из Supabase; null — демо-режим �
 let subject = loadSubject(); // предмет, выбранный в навигации шапки
 
 // Химическая лаборатория — SVG-иллюстрация: чёткая на любом экране и не требует WebGL.
-const lab = createChemLab($('lab'), { onPick: handlePick, onHover: showHover });
+const lab = createChemLab($('lab'), { onPick: handlePick, onHover: showHover, sound });
 const bench = createBench(lab);
 
 // Проба газа лучинкой в свободной лаборатории: кнопка — запасной путь к перетаскиванию лучинки на сцене.
@@ -82,6 +83,7 @@ const simStage = createSimStage({
   readoutBox: $('simReadout'),
   chartBox: $('simChart'),
   clearChartBtn: $('clearChartBtn'),
+  sound,
 });
 const live = createLive({
   client: account.realtimeClient(),
@@ -1475,6 +1477,7 @@ try {
 
 // Версия для слабовидящих — те же три места, что и у «A+»: шапка, строка опыта и меню на телефоне
 initAccessibility(['lowVisionBtn', 'lowVisionBtnWork', 'menuLowVision']);
+sound.initSound(['soundBtnWork']);
 
 // Переключатель языка: смена перезагружает страницу (почему — см. src/i18n.js)
 for (const b of document.querySelectorAll('.lang-switch [data-lang]')) {
@@ -1639,9 +1642,26 @@ if (INSTAGRAM_URL) {
 
 // ---------- Запуск ----------
 
-$('temp').addEventListener('input', (e) => setTemperature(Number(e.target.value)));
+let tempTick = 0;
+$('temp').addEventListener('input', (e) => {
+  setTemperature(Number(e.target.value));
+  if (performance.now() - tempTick > 45) {
+    tempTick = performance.now();
+    sound.play('tick', (e.target.value - e.target.min) / (e.target.max - e.target.min));
+  }
+});
 $('washBtn').addEventListener('click', async () => {
-  if (!bench.isBusy()) await bench.wash();
+  if (bench.isBusy()) return;
+  sound.play('pour');
+  await bench.wash();
+});
+// Любая кнопка на рабочем месте отвечает щелчком. Кроме самой кнопки звука (она щёлкает при
+// включении сама), вариантов ответа (у них сигнал «верно / неверно») и кнопок на сцене опыта —
+// их озвучивает сама сцена
+$('workspace').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b || b.disabled || b.id === 'soundBtnWork' || b.id === 'washBtn' || b.closest('.options, #simCanvas, #lab')) return;
+  sound.play('click');
 });
 $('backBtn').addEventListener('click', openMenu);
 $('homeBtn').addEventListener('click', () => (screen === 'auth' ? null : openMenu()));

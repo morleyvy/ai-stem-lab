@@ -3,6 +3,7 @@
 // Интерфейс (add / wash / setReaction / setTemperature / highlight / setShelf / isBusy / stage)
 // используют bench.js, уроки и свободная лаборатория; setSetup выбирает установку,
 // splint / onSplint — проба газа горящей лучинкой.
+// sound — модуль звуков (src/sound.js); его передаёт только рабочий стол, превью на плитках молчат.
 
 import { SUBSTANCES } from '../data/substances.js';
 import { SHELF, SHELF_BY_ID } from '../data/shelf.js';
@@ -19,7 +20,7 @@ const POUR_TIME = 0.9;
 const STOPPER_TIME = 0.3;
 export const SETUPS = ['beaker', 'tubes', 'gas', 'burner', 'hood'];
 
-export function createChemLab(container, { onPick, onHover } = {}) {
+export function createChemLab(container, { onPick, onHover, sound } = {}) {
   let visible = SHELF.map((it) => it.id);
   let temperature = 20;
   let busy = false;
@@ -90,6 +91,10 @@ export function createChemLab(container, { onPick, onHover } = {}) {
       cell.foam.update(cell.foamK, now);
       if (!rig.closedGas) gasAmount = Math.max(0, gasAmount - dt * 0.04);
       updateVapours(dt);
+      if (sound) {
+        sound.level('burner', rig.heater && temperature > 20 ? 0.5 + (temperature - 20) / 160 : 0);
+        sound.level('boil', temperature >= 70 && cell.level > 0.01 ? (temperature - 60) / 40 : 0);
+      }
       sp.frame(dt, now);
       fx.update(dt);
 
@@ -174,6 +179,10 @@ export function createChemLab(container, { onPick, onHover } = {}) {
     const t = action.t;
     // Пробку вынимают, пока реактив добавляют, и сразу возвращают на место
     rig.stopper?.set(clamp01(t / STOPPER_TIME) * clamp01((action.end - t) / STOPPER_TIME));
+    if (rig.stopper && !action.corked && t >= action.end - STOPPER_TIME) {
+      action.corked = true;
+      sound?.play('cork');
+    }
 
     if (item.kind === 'dish') {
       // Щипцами переносим кусочек: чашка на месте, падает кусочек
@@ -187,6 +196,7 @@ export function createChemLab(container, { onPick, onHover } = {}) {
           piece.remove();
           action.piece = null;
           addSolid(item);
+          sound?.play('plop');
         }
       }
       if (t >= action.end) finish();
@@ -200,6 +210,10 @@ export function createChemLab(container, { onPick, onHover } = {}) {
       place(it.g, lerp(it.home.x, above.x, p), lerp(it.home.y, above.y, p) - Math.sin(p * Math.PI) * 40, 0);
     } else if (t < LIFT_TIME + POUR_TIME) {
       const p = (t - LIFT_TIME) / POUR_TIME;
+      if (!action.poured) {
+        action.poured = true;
+        sound?.play(item.kind === 'dropper' ? 'drip' : 'pour');
+      }
       const tilt = -Math.min(1, p * 3) * 105;
       place(it.g, above.x, above.y, tilt);
       // Положение горлышка после поворота на tilt вокруг дна склянки
@@ -295,6 +309,7 @@ export function createChemLab(container, { onPick, onHover } = {}) {
         n -= 1;
       }
       cell.foamTarget = vigorous ? Math.min(1, 0.5 + (intensity - 0.9) * 0.6) : 0;
+      sound?.level('fizz', Math.min(1, 0.3 + intensity * 0.7));
       gasAmount = Math.min(1, gasAmount + intensity * dt * 0.25);
     }
     if (v.precipitate && cell.level > 0) {
@@ -374,11 +389,13 @@ export function createChemLab(container, { onPick, onHover } = {}) {
         fx.flash(tip.x, tip.y - 6);
         fx.shock(tip.x, tip.y - 6);
         rig.receiver?.kick();
+        sound?.play('boom');
         gasAmount = 0;
       } else if (outcome === 'out') {
         st.lit = false;
         st.emberK = 1;
         st.smoke = 1.4;
+        sound?.play('hiss');
       }
       st.result = { gas, outcome };
       st.mode = 'hold';
@@ -509,6 +526,7 @@ export function createChemLab(container, { onPick, onHover } = {}) {
         action.piece = s('g', {}, [pieceShape(item, SUBSTANCES[item.substance].color)]);
         scene.svg.append(action.piece);
       }
+      if (rig.stopper) sound?.play('uncork');
       await wait();
     },
     // В штативе с пробирками новый опыт ставят в чистую пробирку, а прежняя остаётся для сравнения
@@ -538,9 +556,17 @@ export function createChemLab(container, { onPick, onHover } = {}) {
       const key = result.params.substances.filter((x) => x !== 'indicator_phph').sort().join('+');
       const same = reaction && reaction.key === key && reaction.status === result.status;
       reaction = { key, status: result.status, result, progress: same ? reaction.progress : 0, heat: same ? reaction.heat : 0, fromColor: cell.liquid };
+      // Пузыри озвучивает шипение в updateReaction; здесь — разовый звук начала реакции
+      if (!same && sound) {
+        const v = result.visual;
+        if (result.status === 'indicator') sound.play('chime');
+        else if (result.status === 'reaction' && v.precipitate) sound.play('shimmer');
+        else if (result.status === 'reaction' && !v.bubbles && v.liquidEnd && v.liquidEnd !== cell.liquid) sound.play('chime');
+      }
       if (result.params.concentration === 'concentrated') cell.fuming = true;
     },
     setTemperature(t) {
+      if (rig.heater && temperature <= 20 && t > 20) sound?.play('ignite');
       temperature = t;
     },
     highlight(ids, { arrow: withArrow = false } = {}) {

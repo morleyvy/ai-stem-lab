@@ -760,6 +760,10 @@ button:focus-visible, a:focus-visible { box-shadow: 0 0 0 6px rgba(26, 92, 255, 
 .font-btn { margin-left: auto; font-weight: 600; min-width: 44px; }
 .low-vision-btn { min-width: 44px; display: inline-grid; place-items: center; padding-inline: 10px; }
 .low-vision-btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
+/* Звук включён по умолчанию — кнопка не подсвечивается, а показывает значок: волны или крестик */
+.ghost.sound-btn[aria-pressed]:not(:hover) { background: transparent; color: inherit; }
+.sound-btn[aria-pressed='true'] .snd-off,
+.sound-btn[aria-pressed='false'] .snd-on { display: none; }
 /* Версия для слабовидящих (src/accessibility.js): чёрное на белом, крупный текст, толстые рамки
    и заметный фокус. Светлая, а не тёмная схема: во многих местах фон задан прямо белым (#fff),
    и тёмная тема оставила бы белые «дыры» с белым текстом. */

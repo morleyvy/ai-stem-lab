@@ -4,10 +4,31 @@
 import { createChart } from './sims/chart.js';
 import { tr } from './i18n.js';
 
+// Тики ползунка не чаще этого интервала — иначе быстрое перетаскивание превращается в треск
+const TICK_MS = 45;
+
+// Звук кнопки-действия на сцене (выключатель, «Запустить», «Налить»…) по id регулятора.
+// Звучит только включение действия (0 → 1); сброс и выбор вариантов — простой щелчок.
+const ACTION_SOUNDS = [
+  [/^(power|switch|sw|assembled|heater|uv|lit|laser|on|light|counter|gen)$/, 'switchOn'],
+  [/^(burn|splint)$/, 'ignite'],
+  [/^(released|launched|fired|lift|drop|trial|pull|exhale|balloon)$/, 'whoosh'],
+  [/^(run|send|scan|copy|prog)$/, 'blip'],
+  [/^(dip|dipped|immerse)$/, 'plop'],
+  [/^(water|acid|alkali|reagent|iodine|indicator|tollens|cuoh|saliva|catalyst|added|salt|lime|sample|antiA|antiB|bath|flow)$/, 'pour'],
+];
+
+function actionSound(id, v, prev) {
+  const kind = ACTION_SOUNDS.find(([re]) => re.test(id))?.[1];
+  if (kind === 'switchOn') return v > prev ? 'switchOn' : 'switchOff';
+  return kind && v > prev ? kind : 'click';
+}
+
 const el = (tag, className, text) => Object.assign(document.createElement(tag), { className: className ?? '', textContent: text ?? '' });
 
-export function createSimStage({ canvasBox, controlsBox, readoutBox, chartBox, clearChartBtn }) {
+export function createSimStage({ canvasBox, controlsBox, readoutBox, chartBox, clearChartBtn, sound }) {
   let current = null;
+  let lastTick = 0;
 
   // Высота панели регуляторов зависит от симуляции (в «Рычаге» их четыре) — отдаём её в CSS,
   // чтобы сцена ужималась ровно настолько, чтобы не уходить под прилипшую панель
@@ -55,6 +76,11 @@ export function createSimStage({ canvasBox, controlsBox, readoutBox, chartBox, c
       const snapped = Math.round((raw - c.min) / c.step) * c.step + c.min;
       const v = Number(Math.min(c.max, Math.max(c.min, snapped)).toFixed(digits));
       if (v === params[id]) return;
+      if (c.action) sound?.play(actionSound(id, v, params[id]));
+      else if (sound && performance.now() - lastTick > TICK_MS) {
+        lastTick = performance.now();
+        sound.play('tick', (v - c.min) / (c.max - c.min || 1));
+      }
       params[id] = v;
       if (inputs.get(id)) inputs.get(id).value = v;
       if (values.get(id)) values.get(id).textContent = valueText(c, v);

@@ -7,6 +7,7 @@ import { rateFactor } from './engine.js';
 import { isActive } from './bench.js';
 import { parseLocally } from './localParser.js';
 import { t, tr } from './i18n.js';
+import { play } from './sound.js';
 
 const SEE_LABELS = {
   gas: 'sb.seeGas', precipitate: 'sb.seePrecipitate', color: 'sb.seeColor', none: 'sb.seeNone',
@@ -62,6 +63,7 @@ export function createSandbox({ bench, lab, $, toast, postJson, explain }) {
     verdict.hidden = guess === null;
     if (guess !== null) {
       const right = guess === r.see;
+      play(right ? 'success' : 'error');
       verdict.className = `verdict ${right ? 'good' : 'bad'}`;
       verdict.textContent = right
         ? t('sb.hypOk')

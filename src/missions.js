@@ -10,6 +10,7 @@ import {
   missionScore, missionStats, observationCode, resultId, runTest, tubesOf,
 } from './data/missions.js';
 import { lang, tr } from './i18n.js';
+import { play } from './sound.js';
 
 // Строки миссий держим здесь, а не в общем src/i18n/ui.js: так модуль целиком свой
 // и не конфликтует с правками словаря интерфейса.
@@ -431,6 +432,7 @@ export function createMissions({ bench, lab, $, toast, postJson, saveResult, onS
     card.id = 'msResult';
     card.append(el('h2', '', mt('resultTitle')));
     const all = a.correct === a.total;
+    play(all ? 'success' : 'error');
     card.append(el('div', `verdict ${all ? 'good' : 'bad'}`, mt('correct', { ok: a.correct, total: a.total })));
     const ul = el('ul', 'ms-verdicts');
     for (const p of a.perTube) {

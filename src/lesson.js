@@ -5,6 +5,7 @@
 import { SHELF_BY_ID } from './data/shelf.js';
 import { SUBSTANCES } from './data/substances.js';
 import { t, tr } from './i18n.js';
+import { play } from './sound.js';
 
 const HEAT_OBSERVE_MS = 1800;
 const SPLINT_OBSERVE_MS = 1300;
@@ -243,6 +244,7 @@ export function startLesson(lesson, { bench, lab, sim, coach, info, journal, toa
         if (opt.ok) stats.qOk++;
         review.answers.push({ step, chosen: tr(opt.text), ok: Boolean(opt.ok) });
         onProgress?.({ type: 'answer', kind: 'question', index, opt: step.options.indexOf(opt), ok: Boolean(opt.ok) });
+        play(opt.ok ? 'success' : 'error');
         [...box.children].forEach((b) => {
           b.disabled = true;
           if (b.dataset.ok) b.classList.add('correct');
@@ -285,6 +287,7 @@ export function startLesson(lesson, { bench, lab, sim, coach, info, journal, toa
 
     const children = [...header(step), el('div', 'step-label', t('lesson.observation'))];
     if (verdict) {
+      play(verdict.ok ? 'success' : 'error');
       children.push(el('p', verdict.ok ? 'feedback good' : 'feedback bad',
         t(verdict.ok ? 'lesson.hypOk' : 'lesson.hypNo', { text: verdict.text })));
     }
@@ -419,6 +422,7 @@ export function startLesson(lesson, { bench, lab, sim, coach, info, journal, toa
       options(q.options, (opt, box) => {
         quizStats.total++;
         if (opt.ok) quizStats.ok++;
+        play(opt.ok ? 'success' : 'error');
         [...box.children].forEach((b) => {
           b.disabled = true;
           if (b.dataset.ok) b.classList.add('correct');
@@ -492,12 +496,14 @@ export function startLesson(lesson, { bench, lab, sim, coach, info, journal, toa
   return {
     async handlePick(id) {
       if (waiting?.type !== 'do') {
+        play('error');
         if (waiting?.type === 'heat') return toast(t('lesson.needHeat'));
         if (waiting?.type === 'splint') return toast(t('lesson.needSplint'));
         return toast(t('lesson.needStep'));
       }
       if (id !== waiting.item) {
         onProgress?.({ type: 'miss', index });
+        play('error');
         return toast(t('lesson.wrongReagent'));
       }
       const step = lesson.steps[index];
