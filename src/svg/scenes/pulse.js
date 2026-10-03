@@ -1,7 +1,7 @@
 // Сцена «Пульс и нагрузка» — медицинский кабинет: светлая стена с панелью, линолеум на полу,
 // кушетка, настенные часы с секундной стрелкой, настенный монитор ЭКГ, беговая дорожка
-// и учебная модель сердца на тумбе. Сначала пульс измеряют вручную: пальцы на запястье руки,
-// лежащей на кушетке (щелчок по руке), 15 секунд считаем удары, ЧСС = удары × 4.
+// и учебная модель сердца на тумбе. Сначала пульс измеряют кнопкой на кушетке:
+// 15 секунд считаем удары, ЧСС = удары × 4.
 // До этого монитор в режиме ожидания и частоту не показывает.
 
 import { createScene, floorShadow, readout, s, shade, text, W, H, touchTarget } from '../kit.js';
@@ -13,11 +13,11 @@ const MONITOR = { x: 380, y: 36, w: 250, h: 176 };
 const TREADMILL = { x: 792, bottom: 470, w: 280 };
 const CLOCK = { x: 112, y: 96, r: 46 };
 const COUCH = { x1: 196, x2: 600, top: 352 };
-const WRIST = { x: 458, y: 334 }; // точка прощупывания пульса (лучевая артерия)
+const BUTTON = { x: 314, y: 311 }; // кнопка «Измерить пульс», лежит на простыне кушетки
 const COUNT_TIME = 15; // с — стандартный подсчёт пульса
 
 export function pulseScene(container, params, set, { heartRate, zone }) {
-  let heartBody, heartGlow, sweepPath, hrScreenText, zoneText, standbyText, beltStripes, consoleEl, secondHand, sector, fingers, target, ring, beatsOut, hrOut;
+  let heartBody, heartGlow, sweepPath, hrScreenText, zoneText, standbyText, beltStripes, consoleEl, secondHand, sector, target, ring, btnLabel, beatsOut, hrOut;
   let shownHr = heartRate(params);
   let beatPhase = 0;
   let sweep = 0;
@@ -30,8 +30,6 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
   let beats = 0;
   let result = params.measured ? Math.round(heartRate(params)) : null;
   let ringT = 1;
-  let press = 0;
-  let handK = 0; // рука считающего: 0 — убрана, 1 — пальцы на запястье
 
   const scene = createScene(container, {
     build(svg, d) {
@@ -167,72 +165,32 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
         s('rect', { x: x1 + 90, y: top - 3, width: x2 - x1 - 110, height: 6, rx: 3, fill: '#f1f5f9', 'fill-opacity': 0.9 }), // одноразовая простыня
       );
 
-      // ---- Рука пациента на кушетке, ладонью вверх (вид сбоку) ----
-      // Предплечье лежит на простыне, кисть расслаблена: пальцы чуть согнуты, большой палец
-      // приподнят над ладонью. Выше локтя рука уходит под сложенное одеяло — пациента
-      // целиком не рисуем, чтобы не загромождать кабинет.
+      // ---- Кнопка «Измерить пульс» на кушетке ----
+      // Раньше здесь были рука пациента и пальцы считающего на запястье, но рисованные руки
+      // выглядели хуже остальной сцены. Подсчёт тот же: 15 секунд считаем удары, ЧСС = удары × 4
       const bed = top - 3; // верх простыни
-      const skin = d.lin([[0, '#f8d9c2'], [0.45, '#efbf9d'], [1, '#d39673']], 'v');
-      const skinLine = '#b9805d';
-      const skinStroke = { stroke: skinLine, 'stroke-width': 1, 'stroke-linejoin': 'round' };
-      const W0 = WRIST.x;
-      const arm = s('g', { style: 'cursor: pointer' }, [
-        s('rect', { x: 250, y: 290, width: 320, height: 66, fill: '#000', 'fill-opacity': 0 }), // зона щелчка
-        // мягкая тень руки на простыне
-        s('ellipse', { cx: W0 - 30, cy: bed + 1, rx: 150, ry: 3.5, fill: '#0f172a', 'fill-opacity': 0.12 }),
-        // закатанный рукав рубашки у локтя
-        s('path', { d: `M330 ${bed - 32} C 336 ${bed - 34}, 344 ${bed - 33}, 350 ${bed - 31} L 352 ${bed} L 330 ${bed} Z`, fill: d.lin([[0, '#b7cdea'], [1, '#86a5cf']], 'v'), stroke: '#6f8fbb', 'stroke-width': 1 }),
-        s('path', { d: `M338 ${bed - 32} L 339 ${bed - 1}`, stroke: '#6f8fbb', 'stroke-opacity': 0.5, 'stroke-width': 1 }),
-        // предплечье: к запястью сужается, нижний край лежит на простыне
-        s('path', { d: `M348 ${bed - 27} C 385 ${bed - 28}, 425 ${bed - 21}, ${W0 + 4} ${bed - 15} L ${W0 + 6} ${bed} L 348 ${bed} Z`, fill: skin, ...skinStroke }),
-        s('path', { d: `M358 ${bed - 24} C 392 ${bed - 25}, 420 ${bed - 20}, ${W0 - 8} ${bed - 15}`, fill: 'none', stroke: '#ffffff', 'stroke-opacity': 0.45, 'stroke-width': 2, 'stroke-linecap': 'round' }),
-        // кисть: ладонь с возвышением у основания большого пальца, согнутые пальцы
-        s('path', {
-          d: `M${W0} ${bed - 15} C ${W0 + 12} ${bed - 21}, ${W0 + 30} ${bed - 22}, ${W0 + 44} ${bed - 18} C ${W0 + 56} ${bed - 17}, ${W0 + 66} ${bed - 20}, ${W0 + 73} ${bed - 25} C ${W0 + 78} ${bed - 29}, ${W0 + 86} ${bed - 27}, ${W0 + 85} ${bed - 20} C ${W0 + 84} ${bed - 11}, ${W0 + 71} ${bed - 1}, ${W0 + 50} ${bed} L ${W0 + 2} ${bed} Z`,
-          fill: skin, ...skinStroke,
-        }),
-        // границы согнутых пальцев (вид со стороны мизинца)
-        s('path', { d: `M${W0 + 46} ${bed - 12} C ${W0 + 58} ${bed - 12}, ${W0 + 70} ${bed - 17}, ${W0 + 79} ${bed - 24}`, fill: 'none', stroke: skinLine, 'stroke-opacity': 0.5, 'stroke-width': 1, 'stroke-linecap': 'round' }),
-        // мизинец — ближний к нам, согнут сильнее остальных
-        s('path', { d: `M${W0 + 46} ${bed - 7} C ${W0 + 56} ${bed - 7}, ${W0 + 64} ${bed - 10}, ${W0 + 70} ${bed - 15} C ${W0 + 74} ${bed - 18}, ${W0 + 79} ${bed - 16}, ${W0 + 77} ${bed - 11} C ${W0 + 74} ${bed - 5}, ${W0 + 64} ${bed - 1}, ${W0 + 52} ${bed - 0.5}`, fill: skin, ...skinStroke }),
-        // большой палец приподнят над ладонью
-        s('path', { d: `M${W0 + 10} ${bed - 18} C ${W0 + 17} ${bed - 28}, ${W0 + 30} ${bed - 31}, ${W0 + 39} ${bed - 29} C ${W0 + 45} ${bed - 28}, ${W0 + 45} ${bed - 22}, ${W0 + 39} ${bed - 22} C ${W0 + 32} ${bed - 21}, ${W0 + 25} ${bed - 19}, ${W0 + 20} ${bed - 16} Z`, fill: skin, ...skinStroke }),
-        // складка запястья и голубоватая вена
-        s('path', { d: `M${W0 + 1} ${bed - 13} Q ${W0 - 2} ${bed - 7} ${W0 + 1} ${bed - 2}`, fill: 'none', stroke: skinLine, 'stroke-opacity': 0.6, 'stroke-width': 1 }),
-        s('path', { d: `M${W0 - 60} ${bed - 17} Q ${W0 - 32} ${bed - 14} ${W0 - 8} ${bed - 12}`, fill: 'none', stroke: '#8fa9c9', 'stroke-width': 1.3, 'stroke-opacity': 0.55, 'stroke-linecap': 'round' }),
-        // сложенное одеяло у изголовья: плечо пациента под ним
-        s('path', { d: `M283 ${bed} L 285 ${bed - 34} Q 286 ${bed - 42} 295 ${bed - 42} L 325 ${bed - 41} Q 335 ${bed - 40} 336 ${bed - 30} L 338 ${bed} Z`, fill: d.lin([[0, '#e2e8f0'], [1, '#b8c4d0']], 'v'), stroke: '#94a3b8', 'stroke-width': 1 }),
-        s('path', { d: `M287 ${bed - 28} Q 311 ${bed - 25} 336 ${bed - 27} M288 ${bed - 14} Q 311 ${bed - 11} 337 ${bed - 13}`, fill: 'none', stroke: '#94a3b8', 'stroke-opacity': 0.7, 'stroke-width': 1.2 }),
-        s('path', { d: `M291 ${bed - 38} Q 309 ${bed - 40} 327 ${bed - 38}`, fill: 'none', stroke: '#ffffff', 'stroke-opacity': 0.7, 'stroke-width': 2, 'stroke-linecap': 'round' }),
-      ]);
-      // Мишень на запястье, пока пульс не измеряли: подсказывает, куда щёлкнуть
-      target = s('circle', { cx: WRIST.x, cy: WRIST.y, r: 7, fill: '#f43f5e', 'fill-opacity': 0.15, stroke: '#f43f5e', 'stroke-width': 1.5, 'stroke-dasharray': '3 2.5' });
-      ring = s('ellipse', { cx: WRIST.x, cy: WRIST.y + 2, rx: 6, ry: 3, fill: 'none', stroke: '#f43f5e', 'stroke-width': 1.5, opacity: 0 });
-
-      // Рука того, кто считает пульс: указательный и средний пальцы на лучевой артерии,
-      // безымянный и мизинец поджаты, рукав белого халата. Рисуется в своей системе координат
-      // (кончики пальцев — в начале, кисть вдоль +x) и поворачивается к запястью сверху-справа.
-      const fingerPair = [[-5, -7, 38, -10, shade('#efbf9d', -0.08)], [0, 0, 38, -2, '#f3c7a7']];
-      const fingerHand = s('g', { transform: `translate(${WRIST.x} ${WRIST.y}) rotate(-28)` }, [
-        // рукав халата с манжетой, растворяется к краю
-        s('path', { d: 'M72 -17 C 100 -20, 128 -23, 150 -24 L 150 18 C 128 17, 100 14, 74 12 Z', fill: d.lin([[0, '#ffffff'], [0.65, '#f1f5f9'], [1, '#f1f5f9', 0]]) }),
-        s('path', { d: 'M72 -17 L 74 12', stroke: '#cbd5e1', 'stroke-width': 1.2 }),
-        s('path', { d: 'M82 -18 L 84 13', stroke: '#e2e8f0', 'stroke-width': 1 }),
-        // тыльная сторона кисти и поджатые пальцы
-        s('path', { d: 'M34 -13 C 48 -17, 62 -16, 74 -13 L 74 10 C 62 12, 52 13, 44 15 C 35 17, 28 12, 30 5 C 31 0, 32 -6, 34 -13 Z', fill: skin, ...skinStroke }),
-        s('path', { d: 'M33 3 C 38 6, 44 7, 52 6', fill: 'none', stroke: skinLine, 'stroke-opacity': 0.5, 'stroke-width': 1 }),
-        // вытянутые пальцы: средний (дальний) и указательный, с бликом ногтя
-        ...fingerPair.flatMap(([x1, y1, x2, y2, fill]) => [
-          s('line', { x1, y1, x2, y2, stroke: skinLine, 'stroke-width': 10.5, 'stroke-linecap': 'round' }),
-          s('line', { x1, y1, x2, y2, stroke: fill, 'stroke-width': 8.5, 'stroke-linecap': 'round' }),
-          s('path', { d: `M${x1 + 1} ${y1 - 3} Q ${x1 + 5} ${y1 - 4.5} ${x1 + 9} ${y1 - 3.5}`, fill: 'none', stroke: '#fbe3d3', 'stroke-width': 2.2, 'stroke-linecap': 'round' }),
-        ]),
-      ]);
-      fingers = s('g', { opacity: 0 }, [fingerHand]);
-      arm.append(target, ring, fingers);
-      touchTarget(arm);
-      arm.addEventListener('click', startCount);
-      svg.append(arm);
+      const { x: bx, y: by } = BUTTON;
+      const bw = 168;
+      const bh = 38;
+      const button = s('g', { style: 'cursor: pointer' });
+      // Пульсирующий ореол, пока пульс не измеряли: подсказывает, куда нажать
+      target = s('rect', { x: bx - 6, y: by - 6, width: bw + 12, height: bh + 12, rx: 15, fill: '#f43f5e', 'fill-opacity': 0.15, stroke: '#f43f5e', 'stroke-width': 1.5, 'stroke-dasharray': '4 3' });
+      // Волна от сердечка на каждом ударе во время подсчёта
+      ring = s('ellipse', { cx: bx + 22, cy: by + bh / 2, rx: 6, ry: 3, fill: 'none', stroke: '#f43f5e', 'stroke-width': 1.5, opacity: 0 });
+      btnLabel = text(bx + 40, by + bh / 2 + 1, tr('Измерить пульс'), { size: 14, weight: 700, fill: '#ffffff', anchor: 'start' });
+      button.append(
+        s('ellipse', { cx: bx + bw / 2, cy: bed + 1, rx: bw * 0.5, ry: 3.5, fill: '#0f172a', 'fill-opacity': 0.15 }),
+        target,
+        s('rect', { x: bx, y: by, width: bw, height: bh, rx: 10, fill: d.lin([[0, '#fb7185'], [1, '#e11d48']], 'v'), stroke: '#be123c', 'stroke-width': 1.2 }),
+        s('rect', { x: bx + 6, y: by + 4, width: bw - 12, height: 3, rx: 1.5, fill: '#ffffff', 'fill-opacity': 0.35 }),
+        // сердечко
+        s('path', { d: `M${bx + 22} ${by + 27} C ${bx + 10} ${by + 19}, ${bx + 12} ${by + 10}, ${bx + 18} ${by + 11} C ${bx + 20} ${by + 11}, ${bx + 22} ${by + 13}, ${bx + 22} ${by + 15} C ${bx + 22} ${by + 13}, ${bx + 24} ${by + 11}, ${bx + 26} ${by + 11} C ${bx + 32} ${by + 10}, ${bx + 34} ${by + 19}, ${bx + 22} ${by + 27} Z`, fill: '#ffffff' }),
+        ring,
+        btnLabel,
+      );
+      touchTarget(button);
+      button.addEventListener('click', startCount);
+      svg.append(button);
 
       // ---- Беговая дорожка на полу ----
       const tx = TREADMILL.x;
@@ -268,7 +226,7 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
       heartGroup.setAttribute('transform', `translate(${cx} ${cy}) scale(${1 + pump * 0.08}) translate(${-cx} ${-cy})`);
       heartGlow.setAttribute('opacity', 0.5 + pump * 0.5);
 
-      // Ручной подсчёт пульса: пальцы ощущают толчок крови при каждом ударе
+      // Подсчёт пульса: каждый удар — толчок крови
       // Время и удары считаем по реальным часам, а не по кадрам: при медленной отрисовке
       // (кадры с ограниченным dt) подсчёт всё равно длится 15 с и даёт честную частоту
       if (counting) {
@@ -277,7 +235,6 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
         if (felt > beats) {
           beats = felt;
           ringT = 0;
-          press = 1;
         }
         if (countT >= COUNT_TIME) {
           counting = false;
@@ -291,14 +248,10 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
         result = beats * 4;
       }
       ringT = Math.min(1, ringT + dt * 2.5);
-      press = Math.max(0, press - dt * 6);
       ring.setAttribute('rx', 6 + ringT * 16);
-      ring.setAttribute('ry', 3 + ringT * 6);
+      ring.setAttribute('ry', 6 + ringT * 16);
       ring.setAttribute('opacity', counting ? 0.9 * (1 - ringT) : 0);
-      // Пальцы ложатся на запястье на время подсчёта и убираются после него
-      handK += ((counting ? 1 : 0) - handK) * Math.min(1, dt * 7);
-      fingers.setAttribute('opacity', Math.min(1, handK * 1.6));
-      fingers.setAttribute('transform', `translate(${(1 - handK) * 34} ${(1 - handK) * -18 + press * 1.5})`);
+      btnLabel.textContent = counting ? `${tr('Подсчёт')}… ${Math.ceil(COUNT_TIME - countT)} с` : tr('Измерить пульс');
       target.setAttribute('opacity', !counting && result === null ? 0.55 + 0.45 * Math.sin(now * 4) : 0);
       beatsOut.set(counting || result !== null ? String(beats) : '—');
       hrOut.set(result !== null && !counting ? String(result) : '—');
@@ -345,13 +298,13 @@ export function pulseScene(container, params, set, { heartRate, zone }) {
     },
   });
 
-  // Щелчок по руке — пальцы на запястье, начинаем 15-секундный подсчёт
+  // Нажатие на кнопку — начинаем 15-секундный подсчёт
   function startCount() {
     if (counting) return;
     counting = true;
     countT = 0;
     countStart = performance.now() / 1000; // та же шкала, что и now в frame()
-    countPhase = Math.random(); // пальцы легли в случайный момент сердечного цикла
+    countPhase = Math.random(); // подсчёт начался в случайный момент сердечного цикла
     beats = 0;
     result = null;
   }
