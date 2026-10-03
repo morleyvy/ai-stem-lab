@@ -33,8 +33,8 @@ const NEW_LESSONS = LAB_LESSONS.filter((l) => SHOWN_NEW_LABS.has(l.id));
 const NEW_SIMS = LAB_SIMS.filter((s) => SHOWN_NEW_LABS.has(s.id));
 
 const ALL_SUBJECTS = [
-  { id: 'chemistry', name: 'Химия', short: 'Х', color: '#1a5cff', soft: '#e9f0ff' },
   { id: 'physics', name: 'Физика', short: 'Ф', color: '#7c3aed', soft: '#f5f3ff' },
+  { id: 'chemistry', name: 'Химия', short: 'Х', color: '#1a5cff', soft: '#e9f0ff' },
   { id: 'biology', name: 'Биология', short: 'Б', color: '#047857', soft: '#e6f8f0' },
   { id: 'informatics', name: 'Информатика', short: 'И', color: '#0e7490', soft: '#e3f6fa' },
 ];
