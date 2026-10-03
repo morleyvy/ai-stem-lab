@@ -93,7 +93,45 @@ test('магний вместо цинка: газ и своё уравнени�
 test('симуляция: реплика после ответа — предложение проверить на опыте', () => {
   const memory = newMemory();
   answerOffline('Что показывают приборы?', { sim: ohm }, i18n, memory);
-  assert.equal(answerOffline('Понятно', { sim: ohm }, i18n, memory), '[off.tryIt]');
+  assert.equal(answerOffline('Понятно', { sim: ohm }, i18n, memory), '[off.ok]');
+});
+
+test('приветствие и благодарность — не повод выдавать уравнение', () => {
+  const result = zincInAcid();
+  assert.equal(answerOffline('Привет', { bench: true, result }, i18n), '[off.greet]');
+  assert.equal(answerOffline('Сәлем!', { sim: ohm }, i18n), '[off.greet]');
+  assert.equal(answerOffline('Спасибо большое', { bench: true, result }, i18n), '[off.thanks]');
+});
+
+test('«как называется газ» — вопрос по сути, а не просьба подсказать шаг', () => {
+  const result = zincInAcid();
+  assert.equal(detectIntent('Как называется этот газ?'), 'other');
+  assert.equal(detectIntent('Что делать дальше?'), 'how');
+  const text = answerOffline('Как называется этот газ?', { bench: true, result }, i18n);
+  assert.ok(!text.includes('[off.followSteps]'));
+  assert.ok(text.includes(result.equation));
+});
+
+test('«класс» в вопросе — ещё не вступление в класс', () => {
+  assert.equal(detectIntent('В каком классе это проходят?'), 'other');
+  assert.equal(detectIntent('Как вступить в класс?'), 'joinClass');
+});
+
+test('основные понятия отвечаются из базы', () => {
+  const result = zincInAcid();
+  assert.match(answerOffline('Что такое кислота?', { bench: true, result, subject: 'chemistry' }, ru), /атомы водорода/);
+  assert.match(answerOffline('Что такое напряжение?', { sim: ohm, subject: 'physics' }, ru), /вольт/);
+});
+
+test('безопасность: правило из движка, а не «больше ничего не могу»', () => {
+  const result = zincInAcid();
+  assert.equal(answerOffline('Это опасно?', { bench: true, result }, i18n), result.safety);
+});
+
+test('вопрос не про опыт — честно говорим, что точного ответа нет', () => {
+  const result = zincInAcid();
+  const text = answerOffline('Зачем пробирку держат вверх дном?', { bench: true, result }, i18n);
+  assert.ok(text.startsWith('[off.notSure]'));
 });
 
 import { PENDULUM } from '../src/sims/pendulum.js';

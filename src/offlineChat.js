@@ -16,15 +16,25 @@ const KK_SIMS = { ...KK_CONTENT, ...KK_LABS };
 
 // Корни слов на русском и казахском. Порядок важен: первый совпавший вид вопроса и определяет ответ.
 const INTENTS = [
+  // Реплики, а не вопросы: раньше на «привет» Шоқан выдавал уравнение реакции
+  ['greet', /^\s*(привет|здравств|салам|сәлем|салем|добрый (день|вечер)|доброе утро|қайырлы)/],
+  ['thanks', /спасиб|благодар|рахмет|рақмет/],
+  ['ok', /^\s*(ок|окей|ясно|понятно|хорошо|ладно|понял|поняла|түсінікті|түсіндім|жақсы|жарайды)[\s!.)]*$/],
   ['hypothesis', /гипотез|болжам/],
   ['mission', /мисси|детектив|миссия/],
-  ['progress', /балл|уровен|уровн|достиж|ұпай|деңгей|жетістік/],
-  ['joinClass', /класс|код|учител|сынып|мұғалім/],
-  ['internet', /интернет|офлайн|оффлайн|без сети|желі/],
+  // Про баллы на сайте. Голые «уровень» и «деңгей» не берём: это и энергетический уровень в атоме, и уровень воды
+  ['progress', /балл|достижен|ұпай|жетістік|мой уровень|какой у меня уровень|как повысить уровень|менің деңгейім|деңгейімді/],
+  // Одного слова «класс» мало: «в каком классе это проходят» — не про вступление в класс
+  ['joinClass', /вступ|присоедин|код класс|войти в класс|сыныпқа қосыл|сынып код/],
+  // «Желі» по-казахски — любая сеть, в информатике это вопросы про локальную сеть, а не про офлайн-режим
+  ['internet', /интернет|офлайн|оффлайн|без сети|желісіз/],
+  ['safety', /опасн|безопас|вредн|ядовит|обожж|ожог|трогать|нюхать|қауіп|зиян|улы /],
+  ['unclear', /не понял|не понима|непонят|проще|подробнее|еще раз|түсінбе|түсініксіз|қарапайым/],
   ['readings', /показ|прибор|сколько|значени|измер|көрсет|аспап|қанша|өлше/],
   ['formula', /формул|закон|заң/],
   ['change', /увелич|уменьш|больше|меньше|если|измени|арттыр|кеміт|азайт|көбейт|өзгерт|егер/],
-  ['how', /как |как$|что делать|дальше|помоги|помощь|не получ|не выход|застрял|қалай|не істе|көмектес|келесі|шықпа/],
+  // Только просьбы о ходе работы. Голое «как» сюда не берём: «как называется этот газ» — вопрос по сути
+  ['how', /что делать|что дальше|как дальше|дальше что|с чего начать|куда нажать|что нажать|как (сделать|собрать|начать|провести|включить|добавить|нагреть|налить|пройти)|помоги|помощь|не получ|не выход|застрял|қалай істе|не істе|көмектес|келесі|шықпа/],
   ['why', /почему|зачем|объясн|что происх|что случ|что будет|что прои|неге|не үшін|түсіндір|не бол|не болады/],
 ];
 
@@ -51,28 +61,52 @@ function compose(question, facts, i18n, memory) {
   const { t } = i18n;
   const intent = detectIntent(question);
 
+  if (['greet', 'thanks', 'ok'].includes(intent)) return t(`off.${intent}`);
+
   // Вопросы про сам сайт не зависят от опыта
   if (['hypothesis', 'mission', 'progress', 'joinClass', 'internet'].includes(intent)) return t(`off.faq.${intent}`);
 
   // В миссии нельзя подсказывать вещества: даже «почему» по результату выдало бы ответ
-  if (facts.mission) return t('off.mission');
+  if (facts.mission) return intent === 'safety' ? t('off.safetySim') : t('off.mission');
 
-  // Пересчёт опыта точнее любой заготовки, поэтому он первый
+  // Показания и формулу берём из самого опыта, заготовку — только если вопрос почти дословно из базы
+  // («в чём измеряется напряжение» — про единицы, а не про то, что сейчас на вольтметре)
+  const faq = searchFaq(question, facts, i18n.lang, ['readings', 'formula'].includes(intent) ? FAQ_STRICT : FAQ_THRESHOLD);
+  // Просьба объяснить — к заготовке, даже если в вопросе есть имя регулятора и «больше»:
+  // иначе «почему в солёной воде сила больше» превращалось в пересчёт опыта вместо объяснения
+  if (faq && (faq.score >= FAQ_STRICT || EXPLAIN.test(question.toLowerCase()))) return faq.text;
+  // «Что будет, если…» — пересчёт опыта точнее любой заготовки
   const whatIf = facts.sim && simWhatIf(question, facts.sim, i18n);
   if (whatIf) return whatIf;
   const other = facts.bench && facts.result?.params && mentionedSubstance(question, facts.result.params.substances);
   if (other) return substanceWhatIf(other, facts.result, i18n, memory);
-  // Показания и формулу берём из самого опыта; на остальное сначала ищем готовый проверенный ответ
-  if (!['readings', 'formula'].includes(intent)) {
-    const faq = searchFaq(question, facts, i18n.lang);
-    if (faq) return faq;
+  if (faq) return faq.text;
+  if (intent === 'safety') return facts.bench && facts.result?.safety ? i18n.tr(facts.result.safety) : t(facts.bench ? 'off.safetyBench' : 'off.safetySim');
+  let text;
+  if (facts.sim) text = simAnswer(intent, facts.sim, i18n);
+  else if (facts.bench) text = benchAnswer(intent, facts.result, i18n, memory);
+  else return t('off.noExperiment');
+  // Ответ собран из данных опыта, а вопрос мог быть совсем о другом («кто такой Ньютон»,
+  // «зачем пробирка вверх дном»). Тогда честно говорим, что точного ответа нет, а не делаем вид
+  if (['why', 'other'].includes(intent) && !relevant(question, text)) {
+    // Не по теме после первого ответа — обычно это ответ ученика на вопрос Шоқана («не знаю»):
+    // повторять всё объяснение заново хуже, чем честно сказать, что без сети добавить нечего
+    if (intent === 'other' && memory.last) return t('off.again');
+    return `${t('off.notSure')} ${text}`;
   }
-  if (facts.sim) return simAnswer(intent, facts.sim, i18n, memory);
-  if (facts.bench) return benchAnswer(question, intent, facts.result, i18n, memory);
-  return t('off.noExperiment');
+  return text;
 }
 
-function simAnswer(intent, { def, params }, { t, tr }, memory) {
+// Есть ли в ответе хоть одно значимое слово вопроса («как называется этот газ» → «выделяется газ»).
+// Вопрос без значимых слов не проверяем: судить не по чему, отвечаем по опыту
+function relevant(question, text) {
+  const asked = keys(question);
+  if (!asked.length) return true;
+  const answer = new Set(keys(text, false));
+  return asked.some((k) => answer.has(k));
+}
+
+function simAnswer(intent, { def, params }, { t, tr }) {
   const readings = def.readings(params).map((r) => `${tr(r.label)}: ${r.value}`).join('; ');
   const observation = tr(def.describe(params));
   const theory = tr(def.theory);
@@ -82,24 +116,25 @@ function simAnswer(intent, { def, params }, { t, tr }, memory) {
     case 'change': return `${theory} ${t('off.tryIt')}`;
     case 'how': return tr(def.hint);
     case 'why': return `${theory} ${observation}`;
-    // Не вопрос, а реплика (например, ответ ученика) — после первого ответа предлагаем проверить на опыте
-    default: return memory.last ? t('off.tryIt') : `${observation} ${theory} ${t('off.more')}`;
+    // «Не понял» — то же, но через цифры на приборах: их видно на экране
+    case 'unclear': return `${observation} ${t('off.readings')}: ${readings}. ${t('off.tryIt')}`;
+    default: return `${observation} ${theory}`;
   }
 }
 
-function benchAnswer(question, intent, result, i18n, memory) {
-  const { t, tr } = i18n;
+function benchAnswer(intent, result, i18n, memory) {
+  const { t } = i18n;
   if (!result || result.status === 'need_more') return t('off.benchEmpty');
   if (intent === 'how') return t('off.followSteps');
-
-  if (intent === 'other' && memory.last) return t('off.again');
   return describeResult(result, intent, i18n, memory);
 }
 
 function describeResult(result, intent, { t, tr }, memory) {
   const parts = [];
-  if (intent === 'readings' && result.observations?.length) parts.push(`${t('off.observed')}: ${result.observations.map(tr).join('; ')}.`);
-  if (result.equation && intent !== 'readings') parts.push(`${t('off.equation')}: ${result.equation}.`);
+  // Что видно в сосуде — ответ на «какой газ», «что выпало» и опора для «почему пузырьки»
+  if (['readings', 'other', 'unclear', 'why'].includes(intent) && result.observations?.length) parts.push(`${t('off.observed')}: ${result.observations.map(tr).join('; ')}.`);
+  // «Не понял» — объясняем словами, без уравнения, которое и так было в прошлом ответе
+  if (result.equation && !['readings', 'unclear'].includes(intent)) parts.push(`${t('off.equation')}: ${result.equation}.`);
   if (result.why) parts.push(tr(result.why));
   // Правило безопасности тоже достаточно сказать один раз за опыт
   if (result.safety && !memory.hints.has(result.safety)) {
@@ -149,6 +184,14 @@ const TIME_IDS = ['t', 'time'];
 const words = (text) => text.toLowerCase().replace(/ё/g, 'е').match(/[a-zа-яәіңғүұқөһ]+/g) ?? [];
 // Корень — первые четыре буквы: «длину», «длиной», «длина» совпадут; короткие служебные слова не участвуют
 const stems = (text) => words(text ?? '').filter((w) => w.length >= 4).map((w) => w.slice(0, 4));
+// Значимые слова для поиска по базе: корни длинных слов и короткие слова целиком —
+// без них не находились «тұз», «ом», «ЧСС», «ашу», «газ». Служебные слова отбрасываем
+const SHORT_STOP = new Set(['что', 'как', 'это', 'кто', 'где', 'для', 'чем', 'так', 'его', 'она', 'они', 'мне', 'вот', 'там', 'тут', 'или', 'еще', 'все', 'был', 'нет', 'да', 'не', 'а', 'и', 'в', 'на', 'с', 'у', 'о', 'по', 'из', 'за', 'ли', 'же', 'от', 'при', 'без', 'мен', 'пен', 'бен', 'осы', 'сол', 'бір', 'мы', 'ты', 'вы', 'я']);
+const keys = (text, dropStop = true) => words(text ?? '')
+  .map((w) => (w.length >= 4 ? w.slice(0, 4) : w))
+  .filter((k) => k.length >= 2 && !(dropStop && (STOP.has(k) || SHORT_STOP.has(k))));
+// Для точного совпадения: «кто ты», «откуда 3 1» — в таких вопросах нет значимых слов
+const normalize = (text) => (text ?? '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-яәіңғүұқөһ0-9]+/g, ' ').trim();
 
 function simWhatIf(question, { def, params }, { t, tr }) {
   const q = question.toLowerCase().replace(/ё/g, 'е');
@@ -208,29 +251,37 @@ function simWhatIf(question, { def, params }, { t, tr }) {
 // «зачем реостат» и «для чего в цепи нужен реостат» должны найти один и тот же ответ.
 
 // Вопросительные и служебные слова есть почти в каждом вопросе и ничего не различают
-const STOP = new Set(stems('почему зачем какой какая какие каких сколько такое будет если нужно можно этот этой этого тоже очень когда откуда чтобы неге деген қалай қандай үшін болады керек және бұл осы'));
+// «Чем X отличается от Y», «от чего зависит», «из чего состоит» — общие слова таких вопросов
+// не должны сводить вместе ответы про разные темы
+const STOP = new Set(stems('почему зачем какой какая какие каких сколько такое будет если нужно нужен можно этот этой этого тоже очень когда откуда чтобы чего через отличается неге деген қалай қандай үшін болады керек және бұл осы неден немен тұрады ерекшеленеді'));
 
 // Скрытые работы не должны всплывать в ответах Шоқана
 const FAQ_INDEX = [...OFFLINE_FAQ, ...LAB_FAQ.filter((f) => SHOWN_NEW_LABS.has(f.scope))].map((entry) => ({
   entry,
-  variants: [...entry.q, ...entry.qk].map((v) => new Set(stems(v).filter((s) => !STOP.has(s)))),
+  variants: [...entry.q, ...entry.qk].map((v) => new Set(keys(v))),
+  exact: new Set([...entry.q, ...entry.qk].map(normalize)),
 }));
 
 const FAQ_THRESHOLD = 0.5;
+const FAQ_STRICT = 0.8;
+const EXPLAIN = /^\s*(а\s+)?(почему|зачем|отчего|для чего|неге|не үшін|не себепті)/;
 
-function searchFaq(question, facts, lang) {
-  const asked = new Set(stems(question).filter((s) => !STOP.has(s)));
-  if (!asked.size) return null;
+function searchFaq(question, facts, lang, threshold) {
+  const asked = new Set(keys(question));
+  const exact = normalize(question);
   const here = facts.sim?.def.id ?? facts.lessonId;
   const opened = Boolean(facts.sim || facts.bench);
   const subject = facts.subject ?? (facts.bench ? 'chemistry' : null);
   let best = null;
-  for (const { entry, variants } of FAQ_INDEX) {
+  for (const { entry, variants, exact: phrases } of FAQ_INDEX) {
     // В открытом опыте ответы других опытов не годятся: «почему выделяется газ» в работе
     // про металлы — не про мел. По всей базе ищем, только когда опыт не открыт
     if (opened && ![here, subject, 'general'].includes(entry.scope)) continue;
     // Вопросы открытого опыта и его предмета важнее: «почему период…» в маятнике — про маятник
     const bonus = entry.scope === here ? 0.15 : entry.scope === subject ? 0.05 : 0;
+    // Вопрос слово в слово из базы — это он, даже если значимых слов в нём нет
+    if (phrases.has(exact) && 2 + bonus > (best?.score ?? 0)) best = { entry, score: 2 + bonus };
+    if (!asked.size) continue;
     for (const v of variants) {
       if (!v.size) continue;
       const common = [...v].filter((s) => asked.has(s)).length;
@@ -242,6 +293,6 @@ function searchFaq(question, facts, lang) {
       if (score > (best?.score ?? 0)) best = { entry, score };
     }
   }
-  if (!best || best.score < FAQ_THRESHOLD) return null;
-  return lang === 'kk' ? best.entry.ak : best.entry.a;
+  if (!best || best.score < threshold) return null;
+  return { text: lang === 'kk' ? best.entry.ak : best.entry.a, score: best.score };
 }
