@@ -1678,9 +1678,30 @@ async function boot() {
     show('auth');
     return;
   }
-  const profile = await account.loadProfile().catch(() => null);
-  if (profile) {
-    setUser(profile);
+  // Без сети ответа сервера пришлось бы ждать до 30 секунд на пустом экране — открываем меню
+  // по профилю с прошлого входа, а сервер сверяем в фоне
+  const cached = account.cachedProfile();
+  if (cached) {
+    setUser(cached);
+    openMenu();
+    const res = await account.refreshProfile();
+    if (!res.ok) return; // нет сети — остаёмся с сохранённым профилем
+    if (!res.value) {
+      // Сессия закончилась или аккаунт удалён — без входа дальше нельзя.
+      // Из начатого опыта не выкидываем: ученик потерял бы ход работы
+      constructorUi.reset();
+      setUser(null);
+      if (screen === 'menu') show('auth');
+    } else if (JSON.stringify(res.value) !== JSON.stringify(cached)) {
+      // Учитель мог перевести ученика в другой класс — перерисовываем меню с новыми заданиями
+      setUser(res.value);
+      if (screen === 'menu') renderMenu();
+    }
+    return;
+  }
+  const res = await account.refreshProfile();
+  if (res.ok && res.value) {
+    setUser(res.value);
     openMenu();
   } else {
     show('auth');

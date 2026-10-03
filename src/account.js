@@ -1,7 +1,7 @@
 // Аккаунты и результаты через Supabase. Ключ anon публичный по задумке Supabase:
 // доступ к данным ограничивают политики RLS в supabase/schema.sql, а не секретность ключа.
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { t } from './i18n.js';
 
 // Частая ошибка — вставить адрес REST API (…/rest/v1/). Клиенту нужен корень проекта.
@@ -76,6 +76,47 @@ async function run(fn) {
   }
 }
 
+// Без сети запрос к Supabase не падает сразу: истёкшую сессию клиент обновляет с повторами ~30 с,
+// а при Wi-Fi без выхода в интернет (частое дело в школах) запрос висит без ограничения.
+// Чтения, от которых зависит открытие меню, ограничиваем по времени, иначе сайт «грузится» вместо опытов.
+// Запись (вход, сохранение результата) не ограничиваем: на медленной сети она могла бы пройти,
+// а ученик увидел бы ошибку и повторил действие.
+const READ_TIMEOUT_MS = 6000;
+
+function withTimeout(promise) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('network timeout')), READ_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function read(fn) {
+  if (!navigator.onLine) return Promise.resolve({ ok: false, error: humanError(new Error('network offline')) });
+  return run(() => withTimeout(fn()));
+}
+
+// Профиль с прошлого входа: без сети сайт сразу открывает меню, а сервер сверяем в фоне.
+// Токен сессии Supabase и так лежит в localStorage, профиль (имя, роль, класс) не секретнее его.
+const PROFILE_KEY = 'shoqan.profile';
+
+export function cachedProfile() {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function cacheProfile(profile) {
+  try {
+    if (profile) localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    else localStorage.removeItem(PROFILE_KEY);
+  } catch {
+    // Приватный режим или запрет хранилища: просто работаем без кэша
+  }
+}
+
 const unwrap = ({ data, error }) => {
   if (error) throw error;
   return data;
@@ -134,6 +175,7 @@ export function login(phoneRaw, password) {
 }
 
 export async function logout() {
+  cacheProfile(null);
   await supabase?.auth.signOut();
 }
 
@@ -147,10 +189,18 @@ export function joinClass(code) {
 // Профиль текущего пользователя вместе с классом (для учителя — ещё и код класса).
 export async function loadProfile() {
   if (!supabase) return null;
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return null;
+  const { data: { session }, error } = await supabase.auth.getSession();
+  // Сессию не удалось обновить из-за сети — это не выход из аккаунта, кэш профиля не трогаем
+  if (isAuthRetryableFetchError(error)) throw error;
+  if (!session) {
+    cacheProfile(null);
+    return null;
+  }
   const profile = unwrap(await supabase.from('profiles').select('id, role, full_name, grade, class_id, created_at').eq('id', session.user.id).maybeSingle());
-  if (!profile) return null;
+  if (!profile) {
+    cacheProfile(null);
+    return null;
+  }
   let klass = null;
   if (profile.role === 'teacher') {
     klass = unwrap(await supabase.from('classes').select('id, name, code').eq('teacher_id', profile.id).order('created_at').limit(1).maybeSingle());
@@ -159,8 +209,13 @@ export async function loadProfile() {
   }
   // Телефон в таблицах не хранится — он только логин; показываем его владельцу в «Моих данных»
   const phone = session.user.email?.endsWith(`@${LOGIN_DOMAIN}`) ? session.user.email.split('@')[0] : null;
-  return { ...profile, phone, class: klass };
+  const result = { ...profile, phone, class: klass };
+  cacheProfile(result);
+  return result;
 }
+
+// Сверка профиля с сервером при запуске — с ограничением по времени (см. read)
+export const refreshProfile = () => read(loadProfile);
 
 export function saveResult(lessonId, stats) {
   return run(async () => unwrap(await supabase.from('results').insert({
@@ -198,13 +253,13 @@ export function loadClassResults(classId) {
 // ---------- Ученик: полные результаты и задания ----------
 
 export function loadMyScores(userId) {
-  return run(() => fetchAll(() => supabase.from('results')
+  return read(() => fetchAll(() => supabase.from('results')
     .select('lesson_id, hyp_ok, hyp_total, q_ok, q_total, completed_at')
     .eq('user_id', userId).order('completed_at').order('id')));
 }
 
 export function loadClassAssignments(classId) {
-  return run(async () => unwrap(await supabase.from('assignments')
+  return read(async () => unwrap(await supabase.from('assignments')
     .select('id, lesson_id, due_date, created_at').eq('class_id', classId).order('created_at')));
 }
 
@@ -261,7 +316,7 @@ const CUSTOM_COLUMNS = 'id, lesson_id, title, subject, grade, lang, lesson, crea
 // Учителю RLS отдаёт его работы, ученику — работы учителя его класса.
 // lessonIds — только нужные (ученику — назначенные), чтобы не тянуть лишнее.
 export function loadCustomLessons(lessonIds = null) {
-  return run(async () => {
+  return read(async () => {
     let query = supabase.from('custom_lessons').select(CUSTOM_COLUMNS).order('created_at', { ascending: false }).limit(200);
     if (lessonIds) query = query.in('lesson_id', lessonIds);
     return unwrap(await query);
