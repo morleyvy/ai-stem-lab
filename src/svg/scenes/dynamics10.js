@@ -38,7 +38,7 @@ const SURFACE_NAMES = ['дерево', 'стекло', 'резина'];
 
 export function dynamics10Scene(container, params, set, { friction }) {
   let plateBody;
-  let block, blockBody, blockShine, blockGrain, eye, blockWeights, shelfWeights, dyno, spring, thread, arm;
+  let block, blockBody, blockShine, blockGrain, eye, blockWeights, shelfWeights, dyno, spring, thread, ring;
   let coats, tiles, frArrow, frLabel, vArrow;
   // Ход опыта: held — брусок у начала, run — едет, done — доехал, back — возвращается, pause — ждёт
   let phase = params.pull ? 'run' : 'held';
@@ -74,9 +74,9 @@ export function dynamics10Scene(container, params, set, { friction }) {
       ]);
       block = buildBlock(d);
       dyno = buildDyno(d);
-      arm = buildArm(d);
-      svg.append(thread, block, frArrow, frLabel, vArrow, dyno, arm);
-      bindDyno([dyno, arm]);
+      ring = buildRing();
+      svg.append(thread, block, frArrow, frLabel, vArrow, dyno, ring);
+      bindDyno([dyno, ring]);
     },
 
     frame(dt) {
@@ -168,7 +168,7 @@ export function dynamics10Scene(container, params, set, { friction }) {
       const body = ROD0 + e; // левый край корпуса относительно крючка
       plateBody.setAttribute('transform', `translate(${body.toFixed(1)} 0)`);
       spring.setAttribute('d', springPath(POINTER_X + 2, body + BODY_W - 8));
-      arm.setAttribute('transform', `translate(${(hookX + body + BODY_W - 2).toFixed(1)} ${hookY}) scale(1.2)`);
+      ring.setAttribute('transform', `translate(${(hookX + body + BODY_W - 2).toFixed(1)} ${hookY}) scale(1.2)`);
 
       // Стрелка силы трения — у нижнего края бруска, против движения; её длина пропорциональна Fтр
       const show = phase === 'done' || moving;
@@ -338,17 +338,11 @@ export function dynamics10Scene(container, params, set, { friction }) {
     return `${dd} L${x2.toFixed(1)} 0`;
   }
 
-  // Рука, которая держит кольцо динамометра: кулак и предплечье в рукаве уходят за правый край кадра
-  function buildArm(d) {
-    const skin = d.lin([[0, '#f2c9a5'], [1, '#d9a27a']], 'v');
+  // Кольцо динамометра, за которое его тянут. Руку, державшую кольцо, убрали: рисованная
+  // рука выглядела хуже остальной сцены, а без неё понятно, за что тянуть
+  function buildRing() {
     return s('g', {}, [
       s('circle', { cx: 6, cy: 0, r: 8, fill: 'none', stroke: '#475569', 'stroke-width': 3 }),
-      s('path', { d: 'M30 -6 L 420 -130', stroke: '#c58e66', 'stroke-width': 30, 'stroke-linecap': 'round' }),
-      s('path', { d: 'M150 -45 L 460 -144', stroke: shade('#2563eb', -0.15), 'stroke-width': 44, 'stroke-linecap': 'round' }),
-      s('path', { d: 'M150 -45 L 158 -48', stroke: '#1e3a8a', 'stroke-width': 46, 'stroke-linecap': 'butt' }),
-      s('rect', { x: 8, y: -17, width: 38, height: 34, rx: 12, fill: skin, stroke: '#b07a55', 'stroke-width': 1.2 }),
-      s('path', { d: 'M12 -6 H30 M12 2 H30 M12 10 H28', stroke: '#b07a55', 'stroke-width': 1.2, 'stroke-linecap': 'round' }),
-      s('path', { d: 'M10 -15 C 4 -12, 4 -4, 12 -4', fill: skin, stroke: '#b07a55', 'stroke-width': 1.2 }),
     ]);
   }
 
