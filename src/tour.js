@@ -12,6 +12,9 @@ const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').match
 
 export function createTour({ t }) {
   let active = null; // { name, steps, index, target, returnFocus }
+  // Гостю обучение показываем на каждом визите, но один раз за визит: меню перерисовывается
+  // при смене предмета и класса, и без этого подсказки всплывали бы снова и снова
+  const shownThisVisit = new Set();
 
   const root = document.createElement('div');
   root.className = 'tour';
@@ -156,9 +159,13 @@ export function createTour({ t }) {
   }
 
   return {
-    // Первый визит на экран: показываем один раз
-    maybeStart(name, steps) {
-      if (!isDone(name)) start(name, steps);
+    // Первый визит на экран: показываем один раз. everyVisit — для гостей: без аккаунта
+    // за компьютером может сидеть каждый раз новый ученик (школьный ПК, показ на защите)
+    maybeStart(name, steps, { everyVisit = false } = {}) {
+      if (everyVisit ? shownThisVisit.has(name) : isDone(name)) return;
+      start(name, steps);
+      // Не запустилось (экран ещё не отрисован) — попробуем при следующей отрисовке
+      if (active?.name === name) shownThisVisit.add(name);
     },
     // Повтор по кнопке «Как пользоваться» в подвале
     start,

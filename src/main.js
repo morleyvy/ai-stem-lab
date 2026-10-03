@@ -226,7 +226,7 @@ async function openLesson(target, { onExit = openMenu } = {}) {
   });
   chat.experimentOpened();
   // Учитель, пробующий свою работу в конструкторе, сайт уже знает — обучение ему ни к чему
-  if (!data.preview) tour.maybeStart('lesson', LESSON_TOUR);
+  if (!data.preview) tour.maybeStart('lesson', LESSON_TOUR, { everyVisit: !user });
 }
 
 function nextInSubject(index) {
@@ -620,7 +620,7 @@ function renderSubjects(done) {
     if (soon) section.append(soon);
     return section;
   }));
-  tour.maybeStart('menu', MENU_TOUR);
+  tour.maybeStart('menu', MENU_TOUR, { everyVisit: !user });
 }
 
 // ---------- Аккаунт ученика ----------
